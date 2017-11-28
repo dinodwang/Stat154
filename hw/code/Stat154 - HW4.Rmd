@@ -1,0 +1,225 @@
+---
+title: "Stat154 - HW4"
+author: "Alex Wang"
+date: "October 21, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+suppressWarnings(suppressMessages(library(ElemStatLearn)))
+suppressWarnings(suppressMessages(library(leaps)))
+suppressWarnings(suppressMessages(library(data.table)))
+suppressWarnings(suppressMessages(library(HH)))
+suppressWarnings(suppressMessages(library(glmnet)))
+suppressWarnings(suppressMessages(library(dplyr)))
+suppressWarnings(suppressMessages(library(pls)))
+suppressWarnings(suppressMessages(library(glmnet)))
+suppressWarnings(suppressMessages(library(ISLR)))
+
+```
+
+###Problem 1
+
+```{r}
+
+#Intuition shows that all covariance terms involving the 4th explanatory variable x4 must be equal to one another and non-zero term. This is a reference back to original point that the correlation between x4 and the other terms is a non-zero for all correlations. We can get the value of 0.577 from sqrt(3)/3 where 3 is the number of linear combinations present in the data. 
+
+#We can also show that there is an almost exact linear comination because we know that x4 is equal to the sum of x1, x2, x3. Therefore, if we solve for the correlation and manipulation of the correlation formula such that (where n = [1,2,3]): rn,4= cov(x4, x_n) / sqrt(var(x4)*var(x_n)) = cov(w+v,v)/sqrt(var(w)*var(w+v)) = 0.577. Therefore, we can see that because the data exhibits near perfect multicolinearity, we can solve for the regression constant and get 0.577.
+
+```
+
+###Problem 2
+
+```{r}
+
+#By transitive property, we know that if A and B are orthogonal and B and C are orthogonal, we can assert that A amd C are orthogonal as well. This means that for any h and l combination where either index is not equal to one another, the components should be orthogonal. As such, we can show this via looking at the Hitters data:
+
+Hitters_Modified <- na.omit(Hitters)
+DesignMatrix <- model.matrix(Salary ~ ., data=Hitters_Modified)
+X <- scale(DesignMatrix[,-1])
+y <- Hitters_Modified$Salary
+
+Xi <- X
+yi <- as.matrix(scale(y))
+xscale <- attr(Xi, "scaled:scale")
+xcenter <- attr(Xi, "scaled:center")
+yscale <- attr(yi,"scaled:scale")
+ycenter <- attr(yi, "scaled:center")
+
+list_of_components <- c()
+list_of_weights <- c()
+list_of_loadings <- c()
+list_of_coefficents <- c()
+list_of_fitted <- c()
+
+for(i in 1:ncol(Xi)){
+  
+  Wi = (t(Xi)%*%yi)/sqrt(sum((t(Xi)%*%yi)^2))
+  Zi = (Xi%*%Wi)/as.numeric(t(Wi)%*%Wi)
+  Pi = (t(Xi)%*%Zi)/as.numeric(t(Zi)%*%Zi)
+  Xi = Xi - Zi%*%t(Pi)
+  Bi = (t(yi)%*%Zi)/as.numeric(t(Zi)%*%Zi)
+  yi = yi - as.numeric(Bi)*Zi
+  
+  list_of_components <- cbind(list_of_components, Zi)
+}
+
+#raise issue if not close to 0
+for(i in 2:ncol(list_of_components)){
+  assertthat::assert_that(t(list_of_components[,i])%*%list_of_components[,i-1] <= 1e-10)
+}
+
+#As we can see, the components in succession are orthogonal to one another and by extrapolation, we can also say that the components of any index not equal to one another are orthogonal as well. 
+
+```
+
+###Problem 3
+
+```{r}
+
+#data is most likely different
+data <- scale(prostate[,1:8])
+cor(data)
+
+train_pred <- filter(prostate, train == TRUE)[,1:8]
+train_res <- filter(prostate, train == TRUE)[,9]
+test_pred <- filter(prostate, train == FALSE)[,1:8]
+test_res <- filter(prostate, train == FALSE)[,9]
+train_set <- data.frame(scale(train_pred), lpsa=train_res)
+test_set <- data.frame(scale(test_pred), lpsa=test_res)
+
+```
+
+###Linear Squares Model
+
+```{r}
+
+lsm <- lm(lpsa ~., data=train_set)
+summary(lsm)
+
+
+```
+
+###Best Subset Regression
+
+```{r}
+
+subset <- regsubsets(lpsa ~ ., data=train_set)
+summary(subset)
+summaryHH(subset)
+#one with highest adjusted Rsquared and lowest RSS is model 7
+#model 7 explanatory var include lcavol, lweight, aage, lbph, svi, lcp, pgg45
+
+#we will follow the textbook example and go with #2
+
+lmsubset <- lm.regsubsets(subset, 2)
+summary(lmsubset)
+
+```
+
+###PCR and PLSR
+
+```{r}
+
+#PCR
+set.seed(100)
+pcr_fit <- pcr(lpsa ~ ., data=train_set, scale=TRUE, validation="CV", segments=10)
+summary(pcr_fit)
+plot(pcr_fit$validation$PRESS[1,] / nrow(train_set), type="l", main="PCR", xlab="Number of Components", ylab="CV MSE")
+#8 components generate the lowest CV-MSE at 0.58
+pcr_fit$coefficients[,,8]
+pcr_coeff <- pcr_fit$coefficients[1:8,,]
+matplot(pcr_coeff, type="l", main="Profiles of Coefficients - PCR", xlab="Number of Components", ylab="Standardized Coefficients")
+legend("bottom", rownames(pcr_coeff), col=1:8, pch=1, xpd = TRUE, horiz = TRUE, bty="n")
+
+```
+```{r}
+
+#PLSR
+set.seed(200)
+plsr_fit <- plsr(lpsa ~ ., data=train_set, scale=TRUE, validation="CV", segments=10)
+summary(plsr_fit)
+plot(plsr_fit$validation$PRESS[1,] / nrow(train_set), type="l", main="PLSR", xlab="Number of Components", ylab="CV MSE")
+#6 components generate the lowest CV-MSE at 0.566
+plsr_fit$coefficients[,,6]
+plsr_coeff <- plsr_fit$coefficients[1:8,,]
+matplot(plsr_coeff, type="l", main="Profiles of Coefficients - PLSR", xlab="Number of Components", ylab="Standardized Coefficients")
+legend("bottom", rownames(plsr_coeff), col=1:8, pch=1, xpd = TRUE, horiz = TRUE, bty="n")
+
+```
+
+###RR and Lasso
+
+```{r}
+
+#RR
+set.seed(300)
+ridge_fit <- cv.glmnet(x=as.matrix(train_set[,1:8]), y=train_set[,9], alpha=0)
+RR_refit <- glmnet(x=as.matrix(train_set[,1:8]), y=train_set[,9], alpha = 0)
+plot.cv.glmnet(ridge_fit)
+plot.glmnet(RR_refit)
+
+#Lasso
+set.seed(400)
+lasso_fit <- cv.glmnet(x=as.matrix(train_set[,1:8]), y=train_set[,9], alpha= 1)
+lasso_refit <- glmnet(x=as.matrix(train_set[,1:8]), y=train_set[,9], alpha = 1)
+plot.cv.glmnet(lasso_fit)
+plot.glmnet(lasso_refit)
+            
+```
+
+###Model Selection
+
+```{r}
+
+#intermediary
+newdata <- test_set
+newdata$lpsa <- NULL
+newdata <- data.matrix(newdata)
+
+#best model within each approach
+OLS <- lsm
+Subset <- lmsubset
+PCR <- pcr_fit
+PLSR <- plsr_fit
+Ridge <- ridge_fit
+Lasso <- lasso_fit
+
+MSE.OLS <- sum((test_set$lpsa - predict(OLS, test_set))^2) / nrow(test_set)
+MSE.Subset <- sum((test_set$lpsa - predict(Subset, test_set))^2) / nrow(test_set)
+MSE.PCR <- sum((test_set$lpsa - predict(PCR, test_set, ncomp = 8))^2) / nrow(test_set)
+MSE.PLSR <- sum((test_set$lpsa - predict(PLSR, test_set, ncomp = 6))^2) / nrow(test_set)
+MSE.Ridge <- sum((test_set$lpsa - predict(Ridge, newdata, s="lambda.min"))^2) / nrow(test_set)
+MSE.Lasso <- sum((test_set$lpsa - predict(Lasso, newdata, s="lambda.min"))^2) / nrow(test_set)
+
+Values <- c(MSE.OLS, MSE.Subset, MSE.PCR, MSE.PLSR, MSE.Ridge, MSE.Lasso)
+MSE <-data.frame(Model=c("OLS", "Subset", "PCR", "PLSR", "Ridge", "Lasso"), Values)
+MSE
+#The one with the lowest MSE is Ridge Regression at 0.517
+
+PCR_coef <- coef(PCR, intercept=TRUE)
+PLSR_coef <- coef(PLSR, intercept = TRUE)
+
+Intercept <- c(coef(OLS)[1], coef(Subset)[1], PCR_coef[1], PLSR_coef[1], coef(Ridge)[1], coef(Lasso)[1])
+lcavol <- c(coef(OLS)[2], coef(Subset)[2], PCR_coef[2], PLSR_coef[2], coef(Ridge)[2], coef(Lasso)[2])
+lweight <- c(coef(OLS)[3], coef(Subset)[3], PCR_coef[3], PLSR_coef[3], coef(Ridge)[3], coef(Lasso)[3])
+age <- c(coef(OLS)[4], "", PCR_coef[4], PLSR_coef[4], coef(Ridge)[4], "")
+lbph <- c(coef(OLS)[5], "", PCR_coef[5], PLSR_coef[5], coef(Ridge)[5], "")
+svi <- c(coef(OLS)[6], "", PCR_coef[6], PLSR_coef[6], coef(Ridge)[6], coef(Lasso)[6])
+lcp <- c(coef(OLS)[7], "", PCR_coef[7], PLSR_coef[7], coef(Ridge)[7], "")
+gleason <- c(coef(OLS)[8], "", PCR_coef[8], PLSR_coef[8], coef(Ridge)[8], "")
+pgg45 <- c(coef(OLS)[9], "", PCR_coef[9], PLSR_coef[1], coef(Ridge)[9], "")
+
+table <- data.frame(unname(rbind(Intercept, lcavol, lweight, age, lbph, svi, lcp, gleason, pgg45, Values)))
+rownames(table) <- c("Intercept", "lcavol", "lweight", "age", "lbph", "svi", "lcp", "gleason", "pgg45", "Test Error")
+colnames(table) <- c("OLS", "Subset", "PCR", "PLSR", "Ridge", "Lasso")
+table
+
+#Commentary: Generaly the table is similiar to the one found in ESL. The main difference comes from the data obtained (I suspect the data is different here than the one they used in the textbook). This is evident throughout this hw as the initial exploratory analysis showed significant data discrepancies. Overall, Ridge appears to be the best model for this data set despite the textbook suggesting that it was PCR. The process is correct, so the most likely cause of the difference would be the data drawn.
+
+```

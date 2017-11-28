@@ -1,0 +1,161 @@
+---
+title: "Stat154 - HW2"
+author: "Alex Wang"
+date: "September 21, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+#data preparation
+library(ggplot2)
+library(ggforce)
+temperatures <- read.csv("C:\\Users\\darzo\\Downloads\\temperature.csv")
+row.names(temperatures) <- temperatures$X
+temperatures_active <- temperatures[1:23, 2:13]
+temperatures_supplementary <- scale(as.matrix(temperatures[24:35,2:13]))
+standardized_temp <- scale(as.matrix(temperatures_active))
+
+boxplot(standardized_temp)
+
+```
+
+###Question 1
+
+```{r}
+
+X = (t(standardized_temp)%*%standardized_temp)/(nrow(standardized_temp)-1)
+eigen <- eigen(X)
+
+#check
+V = eigen$vectors
+lambda = solve(diag(eigen$values))
+#v%*%lambda%*%t(V) should equal inv(X)
+#v%*%diag(eigen$values)%*%t(V) should equal X
+
+#Part A: loadings
+row.names(V) = colnames(standardized_temp)
+colnames(V) = c("Comp.1", "Comp.2", "Comp.3", "Comp.4", "Comp.5", "Comp.6", "Comp.7", "Comp.8", "Comp.9", "Comp.10", "Comp.11", "Comp.12")
+V[1:4,]
+
+#Part B: principal components
+Z = (standardized_temp%*%V)
+Z[,1:4]
+
+#Part C: eigenvalues
+eigen$values
+sum(eigen$values)
+
+
+```
+
+###Question 2
+
+```{r}
+
+#Part A: summary of eigen values
+eigenvector <- as.vector(eigen$values)
+percentage <- eigenvector/sum(eigenvector)*100
+cumulative <- cumsum(eigenvector)/sum(eigenvector)*100
+eigentable <- data.frame(eigen$values, percentage, cumulative)
+row.names(eigentable) <- c("Comp.1", "Comp.2", "Comp.3", "Comp.4", "Comp.5", "Comp.6", "Comp.7", "Comp.8", "Comp.9", "Comp.10", "Comp.11", "Comp.12")
+eigentable
+
+#Based on the table, the first two eigen values dominate and account for 98.3% of the variance.
+
+#Part B: barchart and scree-plot
+barplot(eigenvector, main="Screeplot for Eigenvalues", xlab="PC scores", ylab="Variances")
+plot(eigenvector, type='l', main="Screeplot for Eigenvalues", xlab="PC scores", ylab="Variances")
+
+#From the charts, we see that the elbow "ends" around 3 PC scores, which accounts for approx 99.35% of the overall data. We can interpret these charts as the relative value measurements of % shares held by each of the different scores. As such, it is evident that the first three PC scores hold 99.35% which would be retained if we followed the "elbow rule".
+
+#Part C: How many PCs to retain
+
+#The number of PCs we would retain depends primarily on which standard rule we follow. For instance, if we followed Kaiser's rule, we would be looking for eigenvalues that are great than 1, thus giving us 2. However, we followed the elbow rile, we would keep 3 of the eigen values. With all things considered, I believe that we should retain two PCs because the two PCs account for 98.3% of the variance, which is an overwhelming majority and where the remainder is relatively insignificant compared to the other 2 PCs. As such, we would retain Comp.1 and Comp.2.
+
+```
+
+###Question 3
+
+```{r}
+
+#Part A
+Z_supplementary <- temperatures_supplementary%*%V
+Z2 <- rbind(Z, Z_supplementary)
+Z2 <- data.frame(Z2, Area=temperatures$Area, Individuals=c(rep("Active", 23), rep("Supplementary", 12)))
+
+#scatter plot of PC1 and PC2
+ggplot(Z2, aes(x = Comp.1, y = Comp.2, shape=Individuals, col=Area)) +
+  geom_point(size = 2) +
+  labs(title = "Scatterplot of Cities via PC1 and PC2")
+
+
+#Based on the plot, we see that the cities's PC scores are grouped relatively in proximity to the area the city is from. The clusters are generally well formed, with a few skews here and there in the graph. We see that south has primarily lower PC1 scores, east has high PC1 and PC2 scores, west has near 0 for PC1 and PC2 scores, and the north has high PC1 and negative PC2 scores.
+
+
+#Part B: Quality of Individual Representation
+sum_of_squares <- apply(Z^2, 1, sum)
+square_matrix <- Z^2
+cos_squared_matrix <- sweep(square_matrix, c(1,2), sum_of_squares, "/")
+cos_squared_matrix[,1:4]
+
+#finding best/worst
+sum_of_PC12 <- apply(cos_squared_matrix[,1:2], 1, sum)
+#Top 3: Rome, Reykjavik, Lisbon 
+#Bottom 3: Sarajevo, Berlin, Prague
+
+
+#Part C: Contributions of Individuals
+rows = nrow(Z)
+contributions <- square_matrix
+for(i in 1:rows){
+  contributions[i,] <- contributions[i,]/eigen$values
+}
+contributions = contributions*100/(rows-1)
+contributions[,1:4]
+#Influentional Cities
+#Top PC1: Athens
+#Top PC2: Reykjavik
+
+#Bottom PC1: Prague
+#Bottom PC2: Stockholm
+```
+
+#Question 4
+
+```{r}
+
+#Part A: Correlation of Variables and PC scores
+#quant variables (active + supplementary)
+standardized_all_variables <- scale(as.matrix(temperatures[1:23,2:16]))
+correlation <- data.frame(cor(standardized_all_variables, Z), Variable=c(rep("Active", 12), rep("Supplementary", 3)))
+correlation[,1:4]
+
+#Part B: Circle of Correlation
+ggplot(correlation, aes(x=Comp.1, y=Comp.2, col=Variable)) +
+  geom_circle(aes(x0=0, y0=0, r=1), col="grey", inherit.aes = FALSE) +
+  geom_segment(aes(x=0, y=0, xend=Comp.1, yend=Comp.2)) +
+  geom_text(aes(label=row.names(correlation)), col="black") +
+  geom_circle(aes(x0=0, y0=0, r=1)) +
+  geom_vline(xintercept = 0) +
+  geom_hline(yintercept = 0) +
+  labs(title = "Circle of Correlations for Variables")
+
+
+#Part C
+#In our circle of correlations plot, we see that each variable has a varying degree of correlation between PC1 and PC2. Generally, 10 out of 12 of the variables have a strong negative correlation with PC1, with the exception of Amplitude and Latitude. There is an equal distribution of positive and negative correlations between the variables and PC2. 
+
+
+```
+
+###Question 5
+
+```{r}
+
+#The performed PCA demonstrates the relationship and correlation that each variable and individual has on the overall regression. Some of the cities and variables capture more of the variance in the data than others. This makes sense because not all data should be equal - some data capture more of the variance seen in the overall analysis.
+
+```

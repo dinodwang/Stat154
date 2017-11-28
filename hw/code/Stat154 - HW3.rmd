@@ -1,0 +1,318 @@
+---
+title: "Stat 154 - HW3"
+author: "Alex Wang"
+date: "October 5, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+###Problem 1
+
+```{r}
+
+#Our assumption that any beta or estimate is unbiased depends on the fact that the residuals are iid and follow N(0,sigma_squared). We can show this mathematically as well as via real life data.
+
+#mathematical approach
+#assume that we are dealing with simple OLS or y = b0 + b1*x + epsilon
+#using different interpretations of e we can show that
+#sum(epsion_i) = sum(y_i - y_i_hat) = sum(y_i - (b0_hat + b1_hat*x_i))
+#sum(y_i - y_bar) - b1_hat*sum(x_i - x_bar) = 0 - 0 = 0
+#therefore, the sum of all the errors equals zero
+
+#for live example, we will use mtcars data
+car_lm <- lm(mpg ~ disp, data=mtcars)
+sum(car_lm$residuals) < 1e-10
+
+```
+
+###Problem 2
+
+```{r}
+
+#Part A
+#The cross product matrix XTX is symmetric along its diagonal
+#So the missing values are (going by column) 0, 0, 7
+#since the first vector is a column of 1's and the sum product is 30, n = 30 (30 observations)
+cross_product <- cbind(c(30,0,0), c(0,10,7), c(0,7,15))
+cross_product
+#note
+#[1,1] = n
+#[2,2] = n*x_bar
+#[3,3] = n*z_bar
+
+#Part B
+cor(cross_product)[3,2]
+#The linear correlation coefficient is 0.653 
+
+#Part C
+beta_hat <- as.matrix(c(-2, 1, 2))
+xTy <- cross_product%*%beta_hat
+#we know that n=30 and the sum product of the first row of t(design_matrix) and first column of y is -60. Further, we know the first column of our design matrix is our intercept, thus we can say that the mean value of y in this case is -60/30 = -2
+y_bar = -2
+
+#Part D
+#TSS = RegSS + RSS
+#RegSS is the variance of the overall model times the number of samples
+#thus RegSS = sum((fitted - mean)^2) = n^2 * var(model error) = n * (RSS/(n-p-1))
+RSS = 12
+n = 30
+p = 2
+RegSS = (RSS/(n-p-1))*n
+TSS = RSS + RegSS
+R2 = 1 - (RSS/TSS)
+R2
+
+
+```
+
+###Problem 3
+
+```{r}
+
+#set.seed(2)
+#Part A
+x <- rnorm(100, mean=0, sd=1)
+x
+
+#Part B
+eps <- rnorm(100, mean=0, sd=0.25)
+eps
+
+#Part C
+y <- rep(-1, 100) + 0.5*x + eps
+y
+
+#Part D
+plot(x, y)
+#There is a general linear relationship between x and y. The lowest part of the regression is x = -2.8 and y = -2.3 where as the highest part of the regression is x = 2 and y = 0.5
+
+#Part E
+b1 <- cov(x,y)/var(x)
+b0 <- mean(y)-b1*mean(x)
+b1 - (0.5)
+b0 - (-1)
+#The estimates are pretty good, with the values obtained from the estimate very close to the true values
+#another way to find the slope and intercept
+data1 <- data.frame(x, y)
+poly1 <- lm(y ~ x, data=data1)
+poly1$coefficients
+
+
+#Part F
+plot(x, y)
+abline(poly1, col='red')
+abline(a=-1, b=0.5, col="blue")
+legend(-2, 0, c("Fitted", "True"), lty=c(1,1), lwd=c(2.5,2.5),col=c('red', 'blue'))
+#abline(a=b0, b=, col="blue")
+
+#Part G
+poly2 <- lm(y ~ poly(x,2), data=data1)
+#There is evidence that the polynomial regression line fits better by comparing the respective Multiple R-squared values. For the lienar model, the R-squared was 0.7784 where as the R-squared for the polynomial model was 0.7828, showing a small but evident difference.
+
+#Part H
+#want to decrease noise - decrease variance in error term, esp, from 0.25 to 0.001
+set.seed(2)
+esp1 <- rnorm(100, mean=0, sd=0.001)
+y_lower <- -1 + 0.5*x + esp1
+plot(x, y_lower)
+data2 <- data.frame(x, y_lower)
+poly1_lower <- lm(y_lower ~ x, data=data2)
+poly1_lower$coefficients
+plot(x, y_lower)
+abline(poly1_lower, col='red')
+abline(a=-1, b=0.5, col="blue")
+legend(-2, 0, c("Fitted", "True"), lty=c(1,1), lwd=c(2.5,2.5),col=c('red', 'blue'))
+#Analysis: The data is much closer together as there is a clear linear movement of the data points. The estimates of b0 and b1 are more accurate than before, which suggests that the decreased noise in the data directly attributes to a stronger fit of the estimates to the actual parameters.
+
+#Part I
+#want to increase noise - increase variance in error term, esp, from 0.25 to 1.0
+set.seed(3)
+esp2 <- rnorm(100, mean=0, sd=1)
+y_upper <- -1 + 0.5*x + esp2
+plot(x, y_upper)
+data3 <- data.frame(x, y_upper)
+poly1_upper <- lm(y_upper ~ x, data=data3)
+poly1_upper$coefficients
+plot(x, y_upper)
+abline(poly1_upper, col='red')
+abline(a=-1, b=0.5, col="blue")
+legend(-2, 1, c("Fitted", "True"), lty=c(1,1), lwd=c(2.5,2.5),col=c('red', 'blue'))
+#Analysis: The data is much more dispersed as there is a no clear linear relationship of the data points. The estimates of b0 and b1 are less accurate than before, which suggests that the increased noise in the data directly attributes to a weaker fit of the estimates to the actual parameters.
+
+```
+
+###Problem 4
+
+```{r}
+
+ols_fit <- function(design_matrix, response_vector){
+  
+  #make sure the arguments are matrices
+  design_matrix <- as.matrix(design_matrix)
+  response_vector <- as.matrix(response_vector)
+  
+  #test to see if mean centered
+  #assume first column is intercept column
+  counter = 0
+  intercept = 0
+  mean_centered = 0
+  list_of_means <- apply(design_matrix, 2, mean)
+  for(i in 1:length(list_of_means)){
+    if(i == 1){
+      if(list_of_means[i] == 1){
+        intercept = 1
+      }
+    } else {
+      if(list_of_means[i] == 0){
+        mean_centered = mean_centered + 1
+      } else {
+        counter = counter + 1
+      }
+    }
+  }
+  
+  if(intercept + mean_centered == ncol(design_matrix)){
+    design_matrix = design_matrix[,-1]
+  }
+  
+  #QR method
+  QR <- qr(design_matrix)
+  Q <- qr.Q(QR)
+  R <- qr.R(QR)
+  f <- t(Q)%*%response_vector
+  coefficients <- backsolve(R, f)
+  y_values <- response_vector
+  fitted_values <- design_matrix%*%coefficients
+  residuals <- y_values - fitted_values
+  n <- nrow(design_matrix)
+  q <- ncol(design_matrix)
+  return(list(coefficients = coefficients,
+              y_values = y_values,
+              fitted_values = fitted_values,
+              residuals = residuals,
+              n = n,
+              q = q))
+}
+
+#test
+sample <- data.frame(rep(1,nrow(mtcars)), mtcars$disp, mtcars$hp)
+fit <- ols_fit(sample, mtcars$mpg)
+names(fit)
+fit$coefficients
+summary(fit$fitted_values)
+summary(fit$residuals)
+
+```
+
+###Problem 5
+
+```{r}
+
+R2 <- function(ols_fit_model){
+  y_bar <- mean(ols_fit_model$y_values)
+  RegSS <- sum((ols_fit_model$fitted_values - rep(y_bar, length(ols_fit_model$fitted_values)))^2)
+  TSS <- sum((ols_fit_model$y_values - rep(y_bar, length(ols_fit_model$fitted_values)))^2)
+  return(RegSS/TSS)
+}
+R2(fit)
+
+RSE <- function(ols_fit_model){
+  RSS <- sum(ols_fit_model$residuals^2)
+  return(sqrt(RSS/(ols_fit_model$n - ols_fit_model$q)))
+}
+RSE(fit)
+
+```
+
+###Problem 6
+
+```{r}
+
+#lcavol vs lpsa
+#first iteration as proof of concept
+prostate <- read.csv("C:\\Users\\darzo\\OneDrive\\Documents\\Stat154ProblemSet3-Prostate.csv")
+dataframe1 <- data.frame(rep(1, nrow(prostate)), prostate$lcavol)
+prostate_lm <- ols_fit(dataframe1, prostate$lpsa)
+R2_dataframe1 <- R2(prostate_lm)
+RSE_dataframe1 <- RSE(prostate_lm)
+
+#add to model each variable one at a time
+#order each variable is added
+names(prostate[,1:8])
+dataframe <- c(rep(1, nrow(prostate)))
+list_of_R2 <- c()
+list_of_RSE <- c()
+for(i in 1:(ncol(prostate)-1)){
+  dataframe <- cbind(dataframe, prostate[,i])
+  prostate_mod_lm <- ols_fit(dataframe, prostate$lpsa)
+  list_of_R2[i] <- R2(prostate_mod_lm)
+  list_of_RSE[i] <- RSE(prostate_mod_lm)
+}
+
+#value of statistics
+list_of_R2
+list_of_RSE
+
+#plots of statistics
+plot(c(1:8), list_of_R2, xlab="Number of Variables", ylab="R2 Values")
+title("R2 vs # of Variables")
+plot(c(1:8), list_of_RSE, xlab="Number of Variables", ylab="RSE Values")
+title("RSE vs # of Variables")
+
+```
+
+###Problem 7
+
+```{r}
+
+auto <- read.table("C:\\Users\\darzo\\OneDrive\\Documents\\Auto.data.txt", header = TRUE)
+
+#Part A: Scatterplot Matrix
+pairs(auto)
+
+#Part B
+#drop last column and convert each column to numeric for cor function
+adjusted <- auto[,1:ncol(auto)-1]
+for(i in 1:ncol(adjusted)){
+  adjusted[,i] = as.numeric(adjusted[,i])
+}
+cor(adjusted)
+
+#Part C
+multiple_lm <- lm(mpg ~ cylinders + displacement + horsepower + weight + acceleration + year + origin, data=adjusted)
+summary(multiple_lm)
+#Commentary: Generally there is a high degree of correlation between the explanatory variables and the response. We observe the p-values listed as a way of determining significance of variables and we see that cylinders and horsepower have high p-values which could suggest that these variables are not important to the overall rejection. An interesting variable to observe if the "year" variable where each observation is the model year of the car. This variable is of interest because the coefficient would be multiplied by the particularl year of the car to get its estimate, which may be inappropriate since the year is more similar to a categorical variable than it is as a continuous variable.
+
+#Part D
+plots <- plot(multiple_lm)
+#COmmentary: The overall fit of the points is generally pretty good; the residuals appear to be random all thought there is a slight skew of residuals towards the positive side, suggesting that the model may overstate a particular value versus the observed value. The residuals plots, Residuals vs Fitted as well as Normal Q-Q, show a few unusually large outliers, particularly for lower and high fitted values. Generally, middle fitted values have residuals that appear to be random.The leverage plot shows a few extreme values with unusually high leverage, primarily observation 14, which is denoted by the plot.
+
+#Part E
+#chose interactions between weight and acceleration
+summary(lm(mpg ~ weight*acceleration, data=adjusted))
+summary(lm(mpg ~ weight:acceleration, data=adjusted))
+#Analysis: We can base the judgement of significance on the p-values. We see that in both cases, the p-values are small, suggesting that these interactions are significant to the overall composition and prediction of the observed values based on these variables
+
+#Part F
+#log transformed
+adjusted_log <- log(adjusted)
+log_lm <- lm(mpg ~ cylinders + displacement + horsepower + weight + acceleration + year + origin, data=adjusted_log)
+summary(log_lm)
+#higher R2 value (0.8844) but more variables are statistically insignificant (everything except weight and year)
+
+#square root transformed
+adjusted_sqrt <- sqrt(adjusted)
+sqrt_lm <- lm(mpg ~ cylinders + displacement + horsepower + weight + acceleration + year + origin, data=adjusted_sqrt)
+summary(sqrt_lm)
+#higher R2 value (0.8651) but more variables are statistically insignificant (3: cylinders, displacement, acceleration)
+
+#squared transformed
+adjusted_squared <- data.frame(adjusted^2)
+squared_lm <- lm(mpg ~ cylinders + displacement + horsepower + weight + acceleration + year + origin, data=adjusted_squared)
+summary(squared_lm)
+#lower R2 value (0.7075) but all variables are statistically significant based on a siglevel of 0.05
+
+```

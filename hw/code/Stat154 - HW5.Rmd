@@ -1,0 +1,282 @@
+---
+title: "Stat154 - HW5"
+author: "Alex Wang"
+date: "November 5, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+wine <- read.table("C:\\Users\\darzo\\OneDrive\\Documents\\wine.data.txt", sep=',')
+
+colnames(wine) <- colnames(dat)
+#colnames(wine) <- c("class", "alcohol", "malic", "ash", "alcalinity", "magnesium", "phenols", "flavanoids", "nonflavanoids", "proanthocyanins", "color", "hue", "dilution", "proline")
+
+head(wine)
+
+```
+
+###Sum-of-Squares Dispersion Function
+
+```{r}
+
+#TSS
+tss <- function(input_variable){
+  x_bar = mean(input_variable)
+  sum = 0
+  for(i in 1:length(input_variable)){
+    sum = sum + (input_variable[i] - x_bar)^2
+  }
+  return(sum)
+}
+
+#BSS
+bss <- function(pred, response){
+  if(length(pred) != length(response)){
+    stop("lengths not equal")
+  } else {
+    combined <- data.frame(pred, response)
+    classes <- levels(combined$response)
+    sum <- 0
+    gross_avg <- mean(pred)
+    for(i in classes){
+      fil <- filter(combined, response == i)
+      sum <- sum + (nrow(fil)*(mean(fil$pred) - gross_avg)^2)
+    }
+  }
+  return(sum)
+}
+
+#WSS
+wss <- function(pred, response){
+  if(length(pred) != length(response)){
+    stop("lengths not equal")
+  } else {
+    combined <- data.frame(pred, response)
+    classes <- levels(combined$response)
+    sum <- 0
+    for(i in classes){
+      group_sum <- 0
+      fil <- filter(combined, response == i)
+      group_mean <- mean(fil$pred)
+      for(j in 1:nrow(fil)){
+        group_sum <- group_sum + (fil[j,1] - group_mean)^2
+      }
+      sum = sum + group_sum
+    }
+    return(sum)
+  }
+}
+
+#test
+tss(iris$Sepal.Length)
+bss(iris$Sepal.Length, iris$Species)
+wss(iris$Sepal.Length, iris$Species)
+
+```
+
+###Sum-of-Squares Ratio Functions
+
+```{r}
+
+#cor_ratio
+cor_ratio <- function(pred, response){
+  return(bss(pred, response)/tss(pred))
+}
+
+#F_ratio
+F_ratio <- function(pred, response){
+  if(length(pred) != length(response)){
+    stop("Incorrect vector lengths")
+  } else {
+    k = length(levels(response))
+    n = length(pred)
+    numerator <- bss(pred, response) / (k - 1)
+    denominator <- wss(pred, response) / (n - k)
+  }
+  return(numerator/denominator)
+}
+
+
+#test
+cor_ratio(iris$Sepal.Length, iris$Species)
+F_ratio(iris$Sepal.Length, iris$Species)
+
+```
+
+###Discriminant Power of Predictors
+
+```{r}
+
+data <- filter(wine, class == 1 | class == 2)
+data$class <- as.factor(data$class)
+pred_variable <- colnames(data)[-1]
+
+#AIC Approach
+AIC <- c()
+for(i in 2:ncol(data)){
+  AIC[i-1] <- glm(class ~ data[,i], family="binomial", data=data)$aic
+}
+AIC_table <- data.frame(pred_variable, AIC)[order(AIC),]
+barplot(AIC_table$AIC, ylab = "AIC Values", xlab="Predictor Variable", main="AIC by Predictor")
+
+#Correlation Ratio Approach
+corratio <- c()
+for(i in 2:ncol(data)){
+  corratio[i-1] <- cor_ratio(data[,i], data$class)
+}
+Cor_table <- data.frame(pred_variable, corratio)[order(corratio),]
+barplot(Cor_table$corratio, ylab = "Correlation Ratio Values", xlab="Predictor Variable", main="Correlation Ratio Values by Predictor")
+
+#Comparing the two approaches
+combined <- data.frame(pred_variable, AIC, corratio)
+combined
+#Analysis: The predictors with the lowest AIC had the highest correlation ratios, whereas the predictors with the highest AIC generally had the lowest correlation ratios
+
+```
+
+###Variance Functions
+
+```{r}
+
+total_variance <- function(data){
+  x <- scale(as.matrix(data), scale=FALSE)
+  return(t(x)%*%x / (nrow(x) - 1))
+}
+#test total_variance
+total_variance(iris[,1:4])
+cov(iris[,1:4])
+
+between_variance <- function(data, response){
+  dataframe <- data.frame(response,data)
+  classes <- levels(response)
+  x <- matrix(rep(0,ncol(data)*ncol(data)), nrow=ncol(data), ncol=ncol(data))
+  total_avg <- apply(data, 2, mean)
+  for(j in classes){
+    fil <- filter(dataframe, response==j)[,-1]
+    y <- ((apply(fil,2,mean) - total_avg))
+    x <- x + ((nrow(fil)/(nrow(data)-1))) * y%*%t(y)
+  }
+  return(x)
+}
+
+#test between_variance
+between_variance(iris[,1:4], iris[,5])
+
+within_variance <- function(data, response){
+  V = total_variance(data)
+  B = between_variance(data, response)
+  return(V-B)
+}
+
+within_variance(iris[,1:4], iris[,5])
+```
+
+```{r}
+
+list_of_var <- c()
+dataframe <- data.frame(response=iris[,5],iris[,-5])
+classes <- levels(iris[,5])
+x <- c()
+for(i in classes){
+  fil <- filter(dataframe, response==i)[,-1]
+  class_var <- matrix(rep(0,ncol(fil)), nrow =1, ncol = ncol(fil))
+  MC <- apply(fil, 2, mean)
+  for(j in 1:nrow(fil)){
+    class_var <- class_var + (fil[j,]-MC)^2
+  }
+  class_var <- class_var * (nrow(fil) / (nrow(dataframe)))
+  x <- rbind(x, class_var)
+}
+
+
+
+```
+
+```{r}
+
+within_variance <- function(data, response){
+  dataframe <- data.frame(response,data)
+  classes <- levels(response)
+  x <- matrix(rep(0,16), nrow=ncol(data), ncol=ncol(data))
+  total <- matrix(rep(0,16), nrow=ncol(data), ncol=ncol(data))
+  for(i in classes){
+    group_sum <- 0
+    x <- matrix(rep(0,16), nrow=4, ncol=4)
+    fil <- filter(dataframe, response == i)[,-1]
+    group_mean <- apply(fil,2,mean)
+    for(j in 1:nrow(fil)){
+      y <- fil[j,] - group_mean
+      x <- x + (nrow(fil) * as.matrix(y)%*%t(as.matrix(y)))
+    }
+    total = total + x
+  }
+  return(total)
+}
+
+within_variance(iris[,-5], iris[,5])
+
+```
+
+###Canonical Discriminant Analysis
+
+```{r}
+data <- wine[,-1]
+response <- as.factor(wine[,1])
+
+
+#Part 1
+v <- total_variance(data)
+w <- within_variance(data, response)
+b <- between_variance(data, response)
+
+comp <- function(data, response){
+  response <- as.factor(response)
+  dataframe <- data.frame(response,data)
+  classes <- levels(response)
+  x <- matrix(rep(0,ncol(data)*1), nrow=1, ncol=ncol(data))
+  total_avg <- apply(data, 2, mean)
+  for(j in classes){
+    fil <- filter(dataframe, response==j)[,-1]
+    y <- ((apply(fil,2,mean) - total_avg))
+    x <- x + sqrt((nrow(fil)/(nrow(data)-1))) * t(y)
+  }
+  return(x)
+}
+
+c <- comp(data, response)
+t(c)%*%c
+b
+
+#Part 2
+
+
+
+```
+
+```{r}
+
+princomp(data)
+
+```
+
+```{r}
+
+response <- dat[,1]
+data <- dat[-1]
+
+dataframe <- data.frame(response,data)
+classes <- levels(as.factor(response))
+x <- matrix(rep(0,ncol(data)*1), nrow=1, ncol=ncol(data))
+total_avg <- apply(data, 2, mean)
+for(j in classes){
+  fil <- filter(dataframe, response==j)[,-1]
+  y <- ((apply(fil,2,mean) - total_avg))
+  x <- x + sqrt((nrow(fil)/(nrow(data)-1))) * y
+}
+
+```
