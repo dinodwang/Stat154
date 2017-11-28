@@ -1,0 +1,211 @@
+---
+title: "Stat 154 - Lab1"
+author: "Alex Wang"
+date: "September 1, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Libraries Used in Lab
+
+```{r}
+
+suppressWarnings(suppressMessages(library(dplyr)))
+
+```
+
+#Part 1: Basic Vector and Matrix manipulations in R
+
+```{r}
+
+x <- 1:9
+#First Matrix
+fmatrix <- matrix(x, nrow=3)
+fmatrix
+
+#Second Matrix
+smatrix <- matrix(x, nrow=3, byrow=TRUE)
+smatrix
+
+#Diag
+diagonal <- diag(rep(1, times=5), nrow=5, ncol=5)
+diagonal
+
+#column bind
+#given:
+a1 <- c(2, 3, 6, 7, 10)
+a2 <- c(1.88, 2.05, 1.7, 1.6, 1.78)
+a3 <- c(80, 90, 70, 50, 75)
+A <- cbind(a1, a2, a3)
+
+#row bind
+#given:
+b1 <- c(1, 4, 5, 8, 9)
+b2 <- c(1.22, 1.05, 3.6, 0.4, 2.54)
+b3 <- c(20, 40, 30, 80, 100)
+B <- rbind(b1, b2, b3)
+
+#Matrix Mult
+#MMultAB
+A%*%B
+#MMmultBA
+B%*%A
+
+#TransposeAB
+t(A)%*%t(B)
+
+#TransposeBA
+t(B)%*%t(A)
+
+#Iris Example
+sepal <- head(iris)
+data <- cbind(sepal[,1], sepal[,2], sepal[,3], sepal[,4])
+scalar <- c(1, 2, 3, 4)
+final <- data.matrix(data)%*%scalar
+final
+
+#vnorm
+vnorm <- function(v) {
+  v1 <- matrix(v, ncol=length(v))
+  v2 <- t(v1)
+  return(sqrt(v1%*%v2))
+}
+v <- 1:5
+vnorm(v)
+
+#unit vector
+unitvector <- v/vnorm(v)
+unitvector
+
+#is square
+is_square <- function(matrix) {
+  rows <- length(matrix[1,])
+  columns <- length(matrix[,1])
+  if(rows == columns) {
+    return(TRUE)
+  } else{
+    return(FALSE)
+  }
+}
+
+#trace
+mtrace <- function(matrix) {
+  if(is_square(matrix)){
+    sum = 0
+    for(i in 1:length(matrix[1,])) {
+      sum = sum + matrix[i,i]
+    }
+    return(sum)
+  } else {
+    return(None)
+  }
+}
+
+
+#Proofs
+
+#proof 1
+test1 <- cbind(c(1,2,3), c(4,5,6), c(7,8,9))
+test2 <- t(test1)
+mtrace(test1 + test2) == mtrace(test1) + mtrace(test2)
+
+#proof 2
+mtrace(5 * test1) == 5 * mtrace(test1)
+
+#proof 3
+x = cbind(c(1,2), c(3,4))
+y = cbind(c(5,6), c(7,8))
+mtrace(t(x)%*%y) == mtrace(x%*%t(y))
+mtrace(x%*%t(y)) == mtrace(t(y)%*%x)
+mtrace(t(y)%*%x) == mtrace(y%*%t(x))
+```
+
+#Part 2: Transformation and Scaling Operations
+
+```{r}
+
+#creating matrix of data
+M <- data.matrix(head(mtcars) %>% select(mpg, disp, hp, drat, wt))
+M
+
+#using apply()
+ApplyMean <- apply(M, 2, mean)
+ApplyMean
+
+#using scale()
+Mc <- scale(M, scale = FALSE)
+Mc
+
+#Verifiy Mc by using sweep
+#Margin refers to row (1) or column (2)
+SweepM <- sweep(M, 2, ApplyMean, "-")
+SweepM == Mc
+
+#Column Maximum
+MaxM <- apply(M, 2, max)
+MaxM
+
+#scaling by the column maximum
+ScaleMax <- sweep(M, 2, MaxM, "/")
+ScaleMax
+
+#normalize data with min = 0 and max = 0
+#we use the formula: (x - min)/(max - min)
+MinM <- apply(M, 2, min)
+Divisor <- MaxM - MinM
+NormalizeM <- sweep(sweep(M, 2, MinM, "-"), 2, Divisor, "/")
+NormalizeM
+
+#covariance matrix
+MeanMatrix <- matrix(data=1, nrow=nrow(M)) %*% ApplyMean
+DifferenceMatrix <- M - MeanMatrix
+CovarianceMatrix <- (t(DifferenceMatrix) %*% DifferenceMatrix) / (nrow(M)-1)
+CovarianceMatrix
+
+#correlation matrix
+diagSD <- diag(diag(CovarianceMatrix)^(-0.5))
+CorrelationMatrix <- diagSD %*% CovarianceMatrix %*% diagSD
+CorrelationMatrix
+
+#dummify function
+#setting all to false will exclude the last level s.t. there are k-1 levels
+dummify <- function(factorvector, all = TRUE){
+  dummymatrix <- c()
+  klevels <- levels(factorvector)
+  if(all){
+    klevels <- levels(factorvector)
+  } else {
+    klevels <- levels(factorvector)[1:length(levels(factorvector))-1]
+  }
+  for(i in 1:length(factorvector)){
+    interm <- c()
+    for(j in 1:length(klevels)){
+      if(factorvector[i] == klevels[j]){
+        interm[j] = 1
+      } else {
+        interm[j] = 0
+      }
+    }
+    dummymatrix <- rbind(dummymatrix, interm)
+  }
+  colnames(dummymatrix) <- klevels
+  return(dummymatrix)
+}
+#test run
+cyl <- factor(mtcars$cyl)
+dummify(cyl)        #k levels
+dummify(cyl, FALSE) #k-1 levels
+
+#cross tabulation function
+xtb <- function(factorvector1, factorvector2){
+  table1 <- dummify(factorvector1)
+  table2 <- dummify(factorvector2)
+  return(t(table1) %*% table2)
+}
+#test run
+gear <- factor(mtcars$gear)
+xtb(cyl, gear)
+```

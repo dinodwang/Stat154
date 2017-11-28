@@ -1,0 +1,151 @@
+---
+title: "Stat 154 - Lab6"
+author: "Alex Wang"
+date: "October 9, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Libraries Used in Lab
+
+```{r}
+
+suppressWarnings(suppressMessages(library(ISLR)))
+suppressWarnings(suppressMessages(library(pls)))
+
+```
+
+###DEMO
+
+```{r}
+
+str(Hitters, vec.len=1)
+#PCR object
+pcr_fit <- pcr(Salary ~ ., data=Hitters, scale = TRUE, validation="none")
+
+#Available calls to PCR fit object
+names(pcr_fit)
+
+```
+
+#Replication
+###Start with PCA
+
+```{r}
+
+Hitters_Modified <- na.omit(Hitters)
+DesignMatrix <- model.matrix(Salary ~ ., data=Hitters_Modified)
+X <- scale(DesignMatrix[,-1])
+y <- Hitters_Modified$Salary
+
+svd <- svd(X)
+U <- svd$u
+V <- svd$v
+D <- svd$d
+Z <- X%*%V
+
+#Comparison to PCR function output from pls library
+Z[1:6,]
+pcr_fit$scores[1:6,1:19]
+
+```
+
+###PC Regression on First Component
+
+```{r}
+
+Z1 <- as.matrix(Z[,1])
+b1 <- solve(t(Z1)%*%Z1)%*%t(Z1)%*%as.matrix(y)
+fitted_values <- as.numeric(b1)*Z1
+
+#Comparison to PCR function output from pls library
+head(fitted_values + mean(y))
+head(pcr_fit$fitted.values[, ,1])
+
+```
+
+###PC Regression on all PCs
+
+```{r}
+
+bpcr <- solve(t(Z)%*%Z)%*%t(Z)%*%as.matrix(y)
+y_hat <- Z%*%bpcr
+
+#Comparison to PCR function output from pls library
+head(y_hat + mean(y))
+head(pcr_fit$fitted.values[, ,19])
+
+```
+
+###PCR Coefficiencts
+
+```{r}
+
+b1star <- b1%*%V[,1]
+b1star
+pcr_fit$coefficients[,,1]
+
+bstarlist <- c()
+
+for(i in 1:ncol(V)){
+  Zi <- as.matrix(Z[,i])
+  bi <- solve(t(Zi)%*%Zi)%*%t(Zi)%*%as.matrix(y)
+  bstarlist <- rbind(bstarlist, bi%*%V[,i])
+}
+
+#Comparison to PCR function output from pls library
+head(bstarlist, 1)
+pcr_fit$coefficients[1:19]
+
+```
+
+###Partial Least Squares Regression
+
+```{r}
+
+Xi <- X
+yi <- as.matrix(scale(y))
+xscale <- attr(Xi, "scaled:scale")
+xcenter <- attr(Xi, "scaled:center")
+yscale <- attr(yi,"scaled:scale")
+ycenter <- attr(yi, "scaled:center")
+
+list_of_components <- c()
+list_of_weights <- c()
+list_of_loadings <- c()
+list_of_coefficents <- c()
+list_of_fitted <- c()
+
+for(i in 1:ncol(Xi)){
+  
+  Wi = (t(Xi)%*%yi)/sqrt(sum((t(Xi)%*%yi)^2))
+  Zi = (Xi%*%Wi)/as.numeric(t(Wi)%*%Wi)
+  Pi = (t(Xi)%*%Zi)/as.numeric(t(Zi)%*%Zi)
+  Xi = Xi - Zi%*%t(Pi)
+  Bi = (t(yi)%*%Zi)/as.numeric(t(Zi)%*%Zi)
+  yi = yi - as.numeric(Bi)*Zi
+  
+  list_of_components <- cbind(list_of_components, Zi)
+  list_of_weights <- cbind(list_of_weights, Wi)
+  list_of_loadings <- cbind(list_of_loadings, Pi)
+  list_of_coefficents <- cbind(list_of_coefficents, Bi)
+  list_of_fitted <- cbind(list_of_fitted, yi)
+    
+}
+
+head(as.matrix(list_of_weights))
+head(as.matrix(list_of_components))
+head(as.matrix(list_of_loadings))
+head(as.matrix(list_of_coefficents))
+head(as.matrix(list_of_fitted))
+
+```
+
+```{r}
+
+pls_fit <- plsr(Salary ~ ., data=Hitters, scale = TRUE)
+
+```

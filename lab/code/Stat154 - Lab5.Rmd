@@ -1,0 +1,175 @@
+---
+title: "Stat154 - Lab5"
+author: "Alex Wang"
+date: "October 2, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Libraries Used in Lab
+
+```{r}
+
+#install.packages("caret")
+suppressWarnings(suppressMessages(library(caret)))
+
+```
+
+###Confidence Intervals
+
+```{r}
+
+regression <- lm(mpg ~ disp + hp, data = mtcars)
+summary(regression)
+
+coefficients <- summary(regression)$coefficients
+df = nrow(mtcars) - 2 - 1
+tscore <- qt(0.975, df)
+se <- coefficients[2,2]
+est <- coefficients[2,1]
+
+#CI boundary calculation
+CI_lower <- est - tscore*se
+CI_upper <- est + tscore*se
+
+confint(regression, "disp")
+CI_lower
+CI_upper
+
+```
+
+###Hypothesis Testing
+
+```{r}
+
+#1) T-statistic = (beta_hat_j - c) / se(beta_hat_j)
+30.235904 - 23.083*1.331566 < 1e-5
+-0.030346 + 4.098*0.007405 < 1e-5
+-0.024840 + 1.856*0.013385 < 1e-5
+
+#2) We are assuming a t-tailed hypothesis test because we are looking at the absolute value of the t-value. The signif codes next to the p-values are the minimum significance levels that would allow us to reject the null hypothesis.
+
+#3) We would fail to reject because the probability of Type I error or the p-value is higher than that of the chosen significance level 0.05, thus we would fail to reject the null hypothesis. 
+
+#4)
+new_T = (-0.030346 + 0.05) / 0.007405
+new_P_value = 1 - pt(new_T, 29)
+new_P_value
+
+#If we used the significance level from the previous hypothesis test for this variable, we would fail to reject this hypothesis since the p-value is greater than the significance level set (0.006386 > 0) and (0.006386 > 0.001)
+
+```
+
+###Assessment of Model Predictive Power
+###MSE - In Sample
+
+```{r}
+
+#1)
+mse_in <- c()
+for(i in 1:6){
+  model <- lm(mpg ~ poly(disp, i), data=mtcars)
+  mse_in[i] <- sum((mtcars$mpg - predict(model, mtcars))^2)/length(mtcars$mpg)
+}
+
+#2) Plot
+plot(c(1:6), mse_in, main="In-Sample MSE by Polynomial Degree", 
+     xlab="Polynomial Degree - poly(x)", ylab="In-Sample MSE")
+
+#3) The model with the smallest in-sample MSE is the 6th model where we are working with a 6 degree polynomial.
+
+#4) Generally, as the model increases in polynomial degrees, the MSE decreases.
+
+```
+
+###MSE - Holdout Method
+
+```{r}
+
+set.seed(1)
+train_ind <- sample(seq_len(nrow(mtcars)), 0.8*nrow(mtcars))
+train <- mtcars[train_ind,]
+test <- mtcars[-train_ind,]
+
+mse_holdout <- c()
+for(i in 1:6){
+  model <- lm(mpg ~ poly(disp, i), data=train)
+  mse_holdout[i] <- sum((test$mpg - predict(model, test))^2)/nrow(test)
+}
+
+plot(x=c(1:6), y=mse_holdout, main="Holdout MSE by Polynomial Degree", 
+     xlab="Polynomial Degree - poly(x)", ylab="Holdout MSE")
+
+#The model with the lowest MSE is polynomial degree 3 model.
+
+```
+
+###Cross Validation
+
+```{r}
+
+folds <- createFolds(mtcars$mpg)
+cross_valid = c()
+mse_cross = c()
+for(i in folds){
+  train <- mtcars[-i,]
+  test <- mtcars[i,]
+  for(j in 1:6){
+    model <- lm(mpg ~ poly(disp, j), data=train)
+    mse_cross[j] <- sum((test$mpg - predict(model, test))^2)/nrow(test)
+  }
+  cross_valid <- cbind(cross_valid, mse_cross)
+}
+rownames(cross_valid) <- seq(from=1, to=6, by=1)
+colnames(cross_valid) <- c("Fold 1", "Fold 2", "Fold 3",
+                           "Fold 4", "Fold 5", "Fold 6",
+                           "Fold 7", "Fold 8", "Fold 9",
+                           "Fold 10")
+cross_valid
+
+#cv-mse
+MSE_CV <- c()
+for(a in 1:nrow(cross_valid)){
+  MSE_CV[a] <- mean(cross_valid[a,])
+}
+
+#1) Plot
+plot(x=c(1:6), y=MSE_CV, main="Cross Validated MSE by Polynomial Degree w/ 10 Folds", 
+     xlab="Polynomial Degree - poly(x)", ylab="CV MSE")
+
+#2) The model with the polynomial degree 3 gives the lowest MSE_CV. It is reasonable because this is the same as our findings from the previous method, holdout method.
+
+#3) Generally, across multiple samples, we see that the model that uses polynomial degree 3 has the lowest MSE_CV.
+
+#4) Done with 5 folds (k=5)
+folds2 <- createFolds(mtcars$mpg, k=5)
+cross_valid2 = c()
+mse_cross2 = c()
+for(i in folds2){
+  train <- mtcars[-i,]
+  test <- mtcars[i,]
+  for(j in 1:6){
+    model <- lm(mpg ~ poly(disp, j), data=train)
+    mse_cross2[j] <- sum((test$mpg - predict(model, test))^2)/nrow(test)
+  }
+  cross_valid2 <- cbind(cross_valid2, mse_cross2)
+}
+
+rownames(cross_valid2) <- seq(from=1, to=6, by=1)
+colnames(cross_valid2) <- c("Fold 1", "Fold 2", "Fold 3", "Fold 4", "Fold 5")
+cross_valid2
+
+#cv-mse
+MSE_CV2 <- c()
+for(a in 1:nrow(cross_valid2)){
+  MSE_CV2[a] <- mean(cross_valid2[a,])
+}
+
+#1) PLot
+plot(x=c(1:6), y=MSE_CV2, main="Cross Validated MSE by Polynomial Degree w/ 5 Folds", 
+     xlab="Polynomial Degree - poly(x)", ylab="CV MSE")
+
+```

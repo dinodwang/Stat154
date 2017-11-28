@@ -1,0 +1,151 @@
+---
+title: "Stat154 - Lab8"
+author: "Alex Wang"
+date: "October 23, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Libraries Used in Lab
+
+```{r}
+
+#install.packages("FactoMineR")
+#install.packages("ISLR")
+suppressWarnings(suppressMessages(library(FactoMineR)))
+suppressWarnings(suppressMessages(library(ISLR)))
+
+```
+
+#Classification using Linear Regression
+
+```{r}
+
+#create new numeric discrete variable based on Default
+summary(Default)
+default_numeric <- rep(0, nrow(Default))
+default_numeric[Default$default == 'Yes'] <- 1
+Default$default_num <- default_numeric
+
+#Linear Regression on Discrete Data (not preferred since unbounded - can go beyond [0,1])
+ols_reg <- lm(default_num ~ balance, data = Default)
+summary(ols_reg)
+
+```
+
+#Classification using Logistic Regression
+
+```{r}
+
+#Logistic Regression
+logreg_default <- glm(default ~ balance, family = binomial, data = Default)
+summary(logreg_default)$coefficients
+
+#Predict default likelihood based on balance amount
+data <- seq(from=100, to=2000, by=100)
+pred <- c()
+for(i in 1:length(data)){
+  pred[i] <- predict(logreg_default, newdata = data.frame(balance=data[i]), type='response')
+}
+plot(x=data, y=pred, main="Default Likelihood w/ different Balances",
+     xlab = "Balance Amount", ylab = "Probability of Default")
+
+```
+
+```{r}
+
+logreg_student <- glm(default ~ student, family = binomial, data=Default)
+summary(logreg_student)
+
+#one unit increase in student will increase probability of default by 0.404
+logreg_all <- glm(default ~ balance + student + income, family = binomial, data=Default)
+summary(logreg_all)
+
+#not all coefficients are significant. Income is not significant with a p-value of 0.7
+
+#Since we are taking into account balance as well, the profile of students with large balances could be offsetting the positive relationship and that the increase in students based on the data could bring the probability of default (based on this demographic)
+
+```
+
+###Stock Market Smarket Data
+
+```{r}
+
+stock <- Smarket
+cor(stock[,-9])
+PCA(stock[,-9])
+
+#some lags are positively correlated (lag 3 and 4) whereas other lags are negatively correlated (lag 1, 2 and 5) There is a high degree of negative correlation between today's and yesterday's return.
+plot(stock$Year, stock$Volume, xlab="Year", ylab="Volume")
+
+
+```
+
+###Logistic Regression on Stock Market Data
+
+```{r}
+
+logreg_stock <- glm(Direction ~ Lag1 + Lag2 + Lag3 + Lag4 + Lag5 + Volume, family = binomial, data=stock)
+summary(logreg_stock)
+
+#There are no significant variables. The coefficient with the highest pvalue is the Lag1 coefficient at 0.145. The sign for Lag1 is negative, suggesting that there is a negative correlation with the direction of the stock (i.e. for every unit Lag1 is up by, it decreases the probability of an up direction by 0.07)
+
+predict_dir <- predict(logreg_stock, type='response')
+predict_dir[1:10]
+
+```
+
+#Estimation of Parameters
+
+```{r}
+
+direction_numeric <- rep(0, nrow(stock))
+direction_numeric[stock$Direction == 'Up'] <- 1
+stock$direction_numeric <- direction_numeric
+Response <- direction_numeric
+DesignMatrix <- model.matrix(Direction ~ Lag1 + Lag2 + Lag3 + Lag4 + Lag5 + Volume, data=stock)
+DesignMatrix <- data.matrix(DesignMatrix)
+
+```
+
+#Newton-Raphson Algorithm
+
+```{r}
+
+NR_algo <- function(DesignMatrix, Response){
+  bold <- as.matrix(rep(0, ncol(DesignMatrix)))
+  DesignMatrix <- data.matrix(DesignMatrix)
+  p <- c()
+  w_values <- c()
+  W <- matrix(0, nrow = nrow(DesignMatrix), ncol = nrow(DesignMatrix))
+  for(i in 1:nrow(DesignMatrix)){
+      p[i] <- (exp(t(DesignMatrix[1,])%*%bold)) / (1 + (exp(t(DesignMatrix[1,])%*%bold)))
+      w_values[i] <- p[i]*(1-p[i])
+    }
+  diag(W) <- w_values
+  z <- DesignMatrix%*%bold + solve(W)%*%(Response - p)
+  bnew <- solve(t(DesignMatrix)%*%W%*%DesignMatrix)%*%t(DesignMatrix)%*%W%*%z
+  
+  #iterative process to find coefficients
+  while(abs(sum(bnew - bold)) >= 1e-6){
+    p <- c()
+    w_values <- c()
+    W <- matrix(0, nrow = nrow(DesignMatrix), ncol = nrow(DesignMatrix))
+    bold <- bnew
+    for(i in 1:nrow(DesignMatrix)){
+      p[i] <- (exp(t(DesignMatrix[i,])%*%bold)) / (1 + (exp(t(DesignMatrix[i,])%*%bold)))
+      w_values[i] <- p[i]*(1-p[i])
+    }
+    diag(W) <- w_values
+    z <- DesignMatrix%*%bold + solve(W)%*%(Response - p)
+    bnew <- solve(t(DesignMatrix)%*%W%*%DesignMatrix)%*%t(DesignMatrix)%*%W%*%z
+  }
+  return(bnew)
+}
+
+NR_algo(DesignMatrix, Response)
+
+```

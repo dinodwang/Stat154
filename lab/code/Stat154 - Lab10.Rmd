@@ -1,0 +1,374 @@
+---
+title: "Stat154 - Lab10"
+author: "Alex Wang"
+date: "November 6, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+
+#install.packages("caret")
+#install.packages("mvtnorm")
+#install.packages("DAAG")
+suppressWarnings(suppressMessages(library(class)))
+suppressWarnings(suppressMessages(library(caret)))
+suppressWarnings(suppressMessages(library(dplyr)))
+suppressWarnings(suppressMessages(library(mvtnorm)))
+suppressWarnings(suppressMessages(library(Matrix)))
+suppressWarnings(suppressMessages(library(DAAG)))
+suppressWarnings(suppressMessages(library(MASS)))
+#suppressWarnings(suppressMessages(library(reshape2)))
+
+```
+
+```{r}
+
+my_knn <- function(x_train, x_test, y_train, k){
+  list_of_dist <- list()
+  cat <- levels(y_train)
+  result <- c()
+  cnt <- 0
+  for(i in 1:nrow(x_test)){
+    cnt = cnt + 1
+    matrix_of_distances <- c()
+    frequencies <- c(rep(0, length(cat)))
+    contenders <- c()
+    for(j in 1:nrow(x_train)){
+      Distance = sqrt(sum((x_test[i,] - x_train[j,])^2))
+      intermediate <- cbind(Distance, y_train[j])
+      matrix_of_distances <- rbind(matrix_of_distances, intermediate)
+    }
+    colnames(matrix_of_distances) <- c("Distance", "Class")
+    ordered_index <- order(matrix_of_distances[,1])
+    k_closest <- matrix_of_distances[ordered_index[1:k],]
+    for(h in 1:k){
+      if(k == 1){
+        frequencies[as.numeric(k_closest[2])] <- frequencies[as.numeric(k_closest[2])] + 1
+      } else {
+        frequencies[as.numeric(k_closest[h,2])] <- frequencies[as.numeric(k_closest[h,2])] + 1
+      }
+    }
+    max = max(frequencies)
+    for(g in 1:length(frequencies)){
+      counter = 1
+      if(frequencies[g] == max){
+        contenders[counter] <- g
+        counter = counter + 1
+      }
+    }
+    if(length(contenders) == 1){
+      result[cnt] <- cat[contenders[1]]
+    } else {
+      final <- subset(k_closest, Class %in% contenders)
+      random <- sample(final, 1)[,2]
+      result[cnt] <- random
+    }
+  }
+  return(result)
+}
+
+train_idx <- sample(nrow(iris), 90)
+x_train <- iris[train_idx,-5]
+x_test <- iris[-train_idx,-5]
+y_train <- iris[train_idx, 5]
+k <- 10
+
+```
+
+```{r}
+
+my_predicted_values <- my_knn(iris[train_idx,-5], iris[-train_idx,-5], iris[train_idx, 5], k=1)
+predicted_values <- knn(iris[train_idx,-5], iris[-train_idx,-5], iris[train_idx, 5], k=1)
+my_predicted_values == predicted_values
+table(my_predicted_values)
+
+```
+
+```{r}
+
+find_k_cv <- function(x_train, y_train, k=c(1:10), nfold=5){
+  folds <- createFolds(y_train, nfold)
+  comparison <- c()
+  mean <- c()
+  test <- 0
+  for(i in 1:length(k)){
+    for(fold in folds){
+      success = 0
+      x_training <- x_train[-fold,]
+      x_testing <- x_train[fold,]
+      y_training <- y_train[-fold]
+      y_testing <- y_train[fold]
+      prediction <- my_knn(x_training, x_testing, y_training, k[i])
+      for(j in 1:length(y_testing)){
+        if(y_testing[j] == prediction[j]){
+          success = success + 1
+        }
+      }
+      intermediate <- cbind(k[i], success/length(y_testing))
+      comparison <- rbind(comparison, intermediate)
+    }
+  }
+  for(l in 1:length(k)){
+    comparison <- data.frame(comparison)
+    filtered <- filter(comparison, comparison[,1] == k[l])
+    current = mean(filtered[,2])
+    if(current > test) {
+      test = current
+      final_k = k[l]
+    }
+  }
+  return(final_k)
+}
+
+find_k_cv(iris[train_idx,-5], iris[train_idx, 5])
+```
+
+```{r}
+
+expit <- function(x){
+  return(exp(x) / (1 + exp(x)))
+}
+
+gen_datasets <- function(){
+  
+  #scenario 1
+  id <- diag(c(1,1))
+  df1 <- data.frame(y=factor(rep(c(0,1), each=50)), rbind(rmvnorm(50, mean=c(0,0), sigma = id), rmvnorm(50, mean=c(1,1), sigma = id)))
+  
+  #scenario 2
+  covmat <- matrix(c(1, -0.5, -0.5, 1), nrow=2)
+  df2 <- data.frame(y=factor(rep(c(0,1), each=50)), rbind(rmvnorm(50, mean=c(0,0), sigma=covmat), rmvnorm(50, mean=c(1,1), sigma=covmat)))
+  
+  #scenario 3
+  mu <- c(0,0); sigma <- matrix(c(1, 1/2, 1/2, 1), 2); nu <- 4
+  n <- 50 #number of draws
+  x_first <- t(t(rmvnorm(n, rep(0, length(mu)), sigma)*sqrt(nu/rchisq(n, nu))) + mu)
+  mu <- c(1,1); sigma <- matrix(c(1, 1/2, 1/2, 1), 2); nu <- 4
+  n <- 50
+  x_second <- t(t(rmvnorm(n, rep(0, length(mu)), sigma)*sqrt(nu/rchisq(n, nu))) + mu)
+  df3 <- data.frame(y=factor(rep(c(0,1), each= 50)), rbind(x_first, x_second))
+  
+  #scenario 4
+  covmat2 <- matrix(c(1,0.5,0.5,1), nrow=2)
+  df4 <- data.frame(y=factor(rep(c(0,1), each=50)), rbind(rmvnorm(50, mean=c(0,0), sigma=covmat2), rmvnorm(50, mean=c(1,1), sigma = covmat)))
+  
+  #scenario 5
+  x <- matrix(rnorm(200), ncol=2)
+  df5_temp <- data.frame(x^2, x[,1]*x[,2])
+  beta <- c(0,2,-1,-2)
+  y <- apply(df5_temp, 1, function(row) {
+    p <- expit(sum(c(1,row)*beta))
+    sample(x=c(0,1), size=1, prob=c(1-p, p))
+  })
+  df5 <- data.frame(y=factor(y), x)
+  
+  #scenario 6
+  x <- matrix(rnorm(200), ncol=2)
+  y <- 1 * (x[,1]^2 + x[,2]^2 > qchisq(p=0.5, df=2))
+  df6 <- data.frame(y=factor(y), x)
+  
+  list(df1, df2, df3, df4, df5, df6)
+  
+}
+
+```
+
+```{r}
+
+my_lda <- function(x, y) {
+  
+  cat <- levels(y)
+  pi_hat <- c()
+  mu_hat <- c()
+  sigma_hat <- 0
+  counter <- 1
+  for(i in cat){
+    mc_class <- c()
+    k_agg <- 0
+    filtered <- filter(data.frame(x, y), y == i)
+    pi_hat[counter] <- nrow(filtered) / nrow(x)
+    intermediate <- apply(filtered[,1:ncol(x)], 2, mean)
+    mu_hat <- rbind(mu_hat, intermediate)
+    for(j in 1:nrow(filtered)){
+      x_j <- data.matrix(filtered[j,1:ncol(x)] - mu_hat)
+      mc_class <- t(x_j)%*%x_j
+      k_agg <- k_agg + mc_class 
+    }
+    sigma_hat <- sigma_hat + k_agg
+    counter = counter + 1
+  }
+  rownames(mu_hat) <- cat
+  return(list(pi_hat = pi_hat, mu_hat = mu_hat, sigma_hat = (sigma_hat / (nrow(x) - length(cat)))))
+}
+
+predict_my_lda <- function(fit, newdata){
+  post_prob <- c()
+  cat <- rownames(fit$mu_hat)
+  classifier <- c()
+  for(i in 1:nrow(newdata)) {
+    observ_post <- c()
+    max <- 0
+    max_index <- 0
+    for(j in 1:nrow(fit$mu_hat)){
+      observ_post[j] <- fit$pi_hat[j] * dmvnorm(newdata[i,], fit$mu_hat[j,], fit$sigma_hat)
+      if(observ_post[j] > max) {
+        max = observ_post[j]
+        max_index = cat[j]
+      }
+    }
+    classifier[i] <- max_index
+    total <- sum(observ_post)
+    observ_post <- observ_post / total
+    post_prob <- rbind(post_prob, observ_post)
+  }
+  rownames(post_prob) <- rownames(newdata)
+  return(list(class = classifier, posterior = post_prob))
+}
+
+my_qda <- function(x, y) {
+  
+  cat <- levels(y)
+  pi_hat <- c()
+  mu_hat <- c()
+  sigma_hat <- array(dim=c(ncol(x), ncol(x), length(cat)))
+  counter <- 1
+  for(i in cat){
+    mc_class <- c()
+    k_agg <- 0
+    filtered <- filter(data.frame(x, y), y == i)
+    pi_hat[counter] <- nrow(filtered) / nrow(x)
+    intermediate <- apply(filtered[,1:ncol(x)], 2, mean)
+    mu_hat <- rbind(mu_hat, intermediate)
+    for(j in 1:nrow(filtered)){
+      x_j <- data.matrix(filtered[j,1:ncol(x)] - mu_hat)
+      mc_class <- t(x_j)%*%x_j
+      k_agg <- k_agg + mc_class 
+    }
+    sigma_hat[,,counter] <- k_agg / (nrow(filtered) - 1)
+    counter = counter + 1
+  }
+  rownames(mu_hat) <- cat
+  return(list(pi_hat = pi_hat, mu_hat = mu_hat, sigma_hat = sigma_hat))
+}
+
+predict_my_qda <- function(fit, newdata){
+  post_prob <- c()
+  cat <- rownames(fit$mu_hat)
+  classifier <- c()
+  for(i in 1:nrow(newdata)) {
+    observ_post <- c()
+    max <- 0
+    max_index <- 0
+    for(j in 1:nrow(fit$mu_hat)){
+      observ_post[j] <- fit$pi_hat[j] * dmvnorm(newdata[i,], fit$mu_hat[j,], fit$sigma_hat[,,j])
+      if(observ_post[j] > max) {
+        max = observ_post[j]
+        max_index = cat[j]
+      }
+    }
+    classifier[i] <- max_index
+    total <- sum(observ_post)
+    observ_post <- observ_post / total
+    post_prob <- rbind(post_prob, observ_post)
+  }
+  rownames(post_prob) <- rownames(newdata)
+  return(list(class = classifier, posterior = post_prob))
+}
+
+
+```
+
+```{r}
+mylist <- list()
+for(i in 1:1){
+  sampleset <- gen_datasets()
+  logit <- c()
+  lda <- c()
+  qda <- c()
+  knn1 <- c()
+  knncv <- c()
+  for(data in sampleset){
+    train_idx <- sample(nrow(data), size=0.8*nrow(data))
+    train <- data[train_idx,]
+    test <- data[-train_idx,]
+    
+    #Logistic Regression (prediction of being 1)
+    logitfit <- glm(y ~ X1 + X2, family=binomial, data=train)
+    logitpred <- predict(logitfit, test[,-1], type="response")
+    
+    #LDA
+    ldafit <- my_lda(train[,-1], train[,1])
+    ldapred <- as.numeric(predict_my_lda(ldafit, test[,-1])$class)
+    
+    #QDA
+    qdafit <- my_qda(train[,-1], train[,1])
+    qdapred <- as.numeric(predict_my_qda(qdafit, test[,-1])$class)
+    
+    #k-NN w/ k = 1
+    knn1fit <- as.numeric(my_knn(train[,-1], test[,-1], train[,1], k=1))
+    
+    #k-NN w/ k obtained from CV
+    knncvfit <- as.numeric(my_knn(train[,-1], test[,-1], train[,1], k=find_k_cv(train[,-1], train[,1])))
+    
+    #all success variables
+    success1 <- 0
+    success2 <- 0
+    success3 <- 0
+    success4 <- 0
+    success5 <- 0
+    
+    for(i in 1:nrow(test)){
+      if(logitpred[i] < 0.5 & test[i,1] == 0){
+        success1 = success1 + 1
+      }
+      if(ldapred[i] == test[i,1]){
+        success2 = success2 + 1
+      }
+      if(qdapred[i] == test[i,1]){
+        success3 = success3 + 1
+      }
+      if(knn1fit[i] == test[i,1]){
+        success4 = success4 + 1
+      }
+      if(knncvfit[i] == test[i,1]){
+        success5 = success5 + 1
+      }
+    }
+    
+    logit <- cbind(logit, 1 - (success1/ nrow(test)))
+    lda <- cbind(lda, 1 - (success2 / nrow(test)))
+    qda <- cbind(qda, 1 - (success3 / nrow(test)))
+    knn1 <- cbind(knn1, 1- (success4 / nrow(test)))
+    knncv <- cbind(knncv, 1 - (success5 / nrow(test)))
+    
+  }
+  error_rates <-rbind(logit, lda, qda, knn1, knncv)
+  mylist[[length(mylist)+1]] <- error_rates
+  
+}
+
+data1 <- c()
+data2 <- c()
+data3 <- c()
+data4 <- c()
+data5 <- c()
+data6 <- c()
+
+for(matrix in mylist){
+  data1 <- c(data1, matrix[,1])
+  data2 <- c(data2, matrix[,2])
+  data3 <- c(data3, matrix[,3])
+  data4 <- c(data4, matrix[,4])
+  data5 <- c(data5, matrix[,5])
+}
+
+boxplot(data1, data2, data3, data4, data5)
+
+
+```
+

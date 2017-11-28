@@ -1,0 +1,191 @@
+---
+title: "Stat154 - Lab9"
+author: "Alex Wang"
+date: "November 3, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Libraries Used in Lab
+
+```{r}
+
+#install.packages("mvtnorm")
+#install.packages("caret")
+#install.packages("lda")
+library(mvtnorm)
+library(caret)
+library(lda)
+
+```
+
+###LDA Function
+
+```{r}
+
+my_lda <- function(x, y) {
+  
+  cat <- levels(y)
+  pi_hat <- c()
+  mu_hat <- c()
+  sigma_hat <- 0
+  counter <- 1
+  for(i in cat){
+    mc_class <- c()
+    k_agg <- 0
+    filtered <- filter(data.frame(x, y), y == i)
+    pi_hat[counter] <- nrow(filtered) / nrow(x)
+    intermediate <- apply(filtered[,1:ncol(x)], 2, mean)
+    mu_hat <- rbind(mu_hat, intermediate)
+    for(j in 1:nrow(filtered)){
+      x_j <- data.matrix(filtered[j,1:ncol(x)] - mu_hat)
+      mc_class <- t(x_j)%*%x_j
+      k_agg <- k_agg + mc_class 
+    }
+    sigma_hat <- sigma_hat + k_agg
+    counter = counter + 1
+  }
+  rownames(mu_hat) <- cat
+  return(list(pi_hat = pi_hat, mu_hat = mu_hat, sigma_hat = (sigma_hat / (nrow(training) - length(cat)))))
+}
+
+#Test lda function
+dat <- iris
+training <- dat[1:140,]
+x <- training[,1:4]
+y <- training[,5]
+lda_iris <- my_lda(x, y)
+lda_iris
+
+```
+
+###Predict LDA Function
+
+```{r}
+
+predict_my_lda <- function(fit, newdata){
+  post_prob <- c()
+  cat <- rownames(fit$mu_hat)
+  classifier <- c()
+  for(i in 1:nrow(newdata)) {
+    observ_post <- c()
+    max <- 0
+    max_index <- 0
+    for(j in 1:nrow(fit$mu_hat)){
+      observ_post[j] <- fit$pi_hat[j] * dmvnorm(newdata[i,], fit$mu_hat[j,], fit$sigma_hat)
+      if(observ_post[j] > max) {
+        max = observ_post[j]
+        max_index = cat[j]
+      }
+    }
+    classifier[i] <- max_index
+    total <- sum(observ_post)
+    observ_post <- observ_post / total
+    post_prob <- rbind(post_prob, observ_post)
+  }
+  rownames(post_prob) <- rownames(newdata)
+  return(list(class = classifier, posterior = post_prob))
+}
+
+#Test predict lda function
+newdata <- iris[141:150,1:4]
+predict_my_lda(lda_iris, newdata)
+
+```
+
+###QDA Function
+
+```{r}
+
+my_qda <- function(x, y) {
+  
+  cat <- levels(y)
+  pi_hat <- c()
+  mu_hat <- c()
+  sigma_hat <- array(dim=c(ncol(x), ncol(x), length(cat)))
+  counter <- 1
+  for(i in cat){
+    mc_class <- c()
+    k_agg <- 0
+    filtered <- filter(data.frame(x, y), y == i)
+    pi_hat[counter] <- nrow(filtered) / nrow(x)
+    intermediate <- apply(filtered[,1:ncol(x)], 2, mean)
+    mu_hat <- rbind(mu_hat, intermediate)
+    for(j in 1:nrow(filtered)){
+      x_j <- data.matrix(filtered[j,1:ncol(x)] - mu_hat)
+      mc_class <- t(x_j)%*%x_j
+      k_agg <- k_agg + mc_class 
+    }
+    sigma_hat[,,counter] <- k_agg / (nrow(filtered) - 1)
+    counter = counter + 1
+  }
+  rownames(mu_hat) <- cat
+  return(list(pi_hat = pi_hat, mu_hat = mu_hat, sigma_hat = sigma_hat))
+}
+
+#Test QDA function
+qda_iris <- my_qda(x,y)
+qda_iris
+
+```
+
+###Predict QDA Function
+
+```{r}
+
+predict_my_qda <- function(fit, newdata){
+  post_prob <- c()
+  cat <- rownames(fit$mu_hat)
+  classifier <- c()
+  for(i in 1:nrow(newdata)) {
+    observ_post <- c()
+    max <- 0
+    max_index <- 0
+    for(j in 1:nrow(fit$mu_hat)){
+      observ_post[j] <- fit$pi_hat[j] * dmvnorm(newdata[i,], fit$mu_hat[j,], fit$sigma_hat[,,j])
+      if(observ_post[j] > max) {
+        max = observ_post[j]
+        max_index = cat[j]
+      }
+    }
+    classifier[i] <- max_index
+    total <- sum(observ_post)
+    observ_post <- observ_post / total
+    post_prob <- rbind(post_prob, observ_post)
+  }
+  rownames(post_prob) <- rownames(newdata)
+  return(list(class = classifier, posterior = post_prob))
+}
+
+#Test predict QDA function
+newdata <- iris[141:150,1:4]
+predict_my_qda(qda_iris, newdata)
+
+```
+
+```{r}
+
+set.seed(100)
+train_idx <- sample(nrow(iris), 90)
+train_set <- iris[train_idx,]
+test_set <- iris[-train_idx,]
+
+lda_train <- my_lda(train_set[,1:4], train_set[,5])
+qda_train <- my_qda(train_set[,1:4], train_set[,5])
+
+lda_pred <- predict_my_lda(lda_train, test_set[,1:4])
+qda_pred <- predict_my_qda(qda_train, test_set[,1:4])
+
+#expected vs lda
+#rows = expected, cols = predicted
+table(test_set$Species, lda_pred$class)
+#confusionMatrix(test_set$Species, lda_pred$class)
+
+#expected vs qda
+table(test_set$Species, qda_pred$class)
+#confusionMatrix(test_set$Species, qda_pred$class)
+
+```

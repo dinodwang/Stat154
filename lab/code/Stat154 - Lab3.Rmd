@@ -1,0 +1,119 @@
+---
+title: "Stat154 - Lab3"
+author: "Alex Wang"
+date: "September 18, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Libraries Used in Lab
+
+```{r}
+
+suppressWarnings(suppressMessages(library(ggplot2)))
+
+```
+
+```{r}
+
+wholesaledata <- read.csv('C:\\Users\\darzo\\Downloads\\Wholesale customers data.csv')
+wholesaledata2 <- wholesaledata
+wholesaledata$Channel <- factor(wholesaledata$Channel, c(1, 2), c('Horeca', 'Retail'))
+wholesaledata$Region <- factor(wholesaledata$Region, c(1, 2, 3), c('Lisbon', 'Oporto', 'Other'))
+
+#Exploratory Analysis
+
+summary(wholesaledata)
+boxplot(wholesaledata$Grocery)
+hist(wholesaledata$Delicassen)
+pairs(wholesaledata)
+#there is generally some kind of relationship for each plot
+
+#pca prcomp
+pca_prcomp <- prcomp(wholesaledata[, 3:8], scale. = TRUE)
+eigenvalues <- pca_prcomp$sdev^2
+eigenvalues
+names(pca_prcomp)
+scores <- pca_prcomp$x
+round(head(scores, 5), 3)
+loadings <- pca_prcomp$rotation
+round(loadings, 3)
+
+#pca princomp
+pca_princomp <- princomp(wholesaledata[, 3:8], cor = TRUE)
+names(pca_princomp)
+pca_princomp$sdev^2
+round(head(pca_princomp$scores, 5), 3)
+pca_princomp$loadings
+pca_princomp$loadings[1:5, 1:6]
+
+```
+
+```{r}
+
+vectoreigen <- as.vector(eigenvalues)
+percentage <- vectoreigen/sum(vectoreigen)*100
+cumulative <- cumsum(vectoreigen)/sum(vectoreigen)*100
+eigentable <- data.frame(eigenvalues, percentage, cumulative)
+
+barplot(eigentable$eigenvalues)
+#first PC captures 44% of variation
+#second PC captures 28% of variation
+#first + second is approx 72% of variation
+
+#1) Would need to retain first and second PC
+
+meanvalue <- mean(vectoreigen)
+eigentable2 <- eigentable[1:2,]
+
+#2) Based on the criterion, would retain 2.
+
+#3) Using Kaiser's rule, would retain 2.
+
+#4) Using the variation, would retain 3.
+
+#5) Based on scree-plot, would retain 4.
+
+```
+
+```{r}
+
+#x needs to be standardized
+x <- as.matrix(scale(wholesaledata[,3:8]))
+v <- pca_princomp$loadings[1:6, 1:6]
+z <- x%*%v
+correlation <- cor(x, z)
+
+z2 <- data.frame(z)
+ggplot(z2, aes(x=z2$Comp.1, y=z2$Comp.2)) + geom_point() + geom_text(aes(label=c(1:dim(z2)[1])))
+ggplot(z2, aes(x=z2$Comp.1, y=z2$Comp.3)) + geom_point() + geom_text(aes(label=c(1:dim(z2)[1])))
+ggplot(z2, aes(x=z2$Comp.2, y=z2$Comp.3)) + geom_point() + geom_text(aes(label=c(1:dim(z2)[1])))
+
+#the data tends to be centered around certain coordinates - usually around (0,0)
+```
+
+```{r}
+
+biplot(pca_prcomp, scale=0)
+
+#with differing scales
+biplot(pca_prcomp, scale=0.3)
+biplot(pca_prcomp, scale=0.5)
+biplot(pca_prcomp, scale=1)
+
+#the plot easiest to read around a scale of 0.5
+
+#looking at the PCs of all variables
+prcomp_all <- prcomp(wholesaledata2, scale. = TRUE)
+All_Channel_PC <- mean(prcomp_all$rotation[1,])
+All_Region_PC <- mean(prcomp_all$rotation[2,])
+
+#looking at the PCs of only categorical
+prcomp_categorical <- prcomp(wholesaledata2[,1:2], scale. = TRUE)
+Channel_PC <- mean(prcomp_all$rotation[1,])
+Region_PC <- mean(prcomp_all$rotation[2,])
+
+```

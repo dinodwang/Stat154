@@ -1,0 +1,115 @@
+---
+title: "Stat 154 - Lab 7"
+author: "Alex Wang"
+date: "October 16, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+#install.packages("ISLR")
+#install.packages("pls")
+#install.packages("glmnet")
+#install.packages("caret")
+suppressWarnings(suppressMessages(library(ISLR)))
+suppressWarnings(suppressMessages(library(pls)))
+suppressWarnings(suppressMessages(library(glmnet)))
+suppressWarnings(suppressMessages(library(caret)))
+
+```
+
+###Cross Validation for PCR and PLSR
+
+```{r}
+
+#PCR
+n <- nrow(Hitters)
+set.seed(100)
+pcr_fit <- pcr(Salary ~ ., data = Hitters, scale = TRUE, validation = "CV", segments=10)
+plot(pcr_fit$validation$PRESS[1,] / n, type="l", main="PCR", xlab="Number of Components", ylab="CV MSE")
+
+#PLSR
+set.seed(200)
+plsr_fit <- plsr(Salary ~ ., data = Hitters, scale = TRUE, validation = "CV", segments=10)
+plot(plsr_fit$validation$PRESS[1,] / n, type="l", main="PLSR", xlab="Number of Components", ylab="CV MSE")
+
+#Question 1
+#PCR = 7 comps, PSLR = 11 comps
+
+```
+
+###Cross Validation for Ridge Regession and Lasso
+
+```{r}
+
+#Ridge Regession: alpha = 0
+#Lasso: alpha = 1
+
+#design matrix
+Hitters_Modified <- na.omit(Hitters)
+DesignMatrix <- model.matrix(Salary ~ ., data=Hitters_Modified)
+x <- as.matrix(DesignMatrix[,2:20])
+y <- Hitters_Modified$Salary
+
+set.seed(300)
+ridge_fit <- cv.glmnet(x=x, y=y, alpha=0)
+plot.cv.glmnet(ridge_fit)
+
+
+set.seed(400)
+lasso <- cv.glmnet(x=x, y=y, alpha=1)
+plot.cv.glmnet(lasso)
+
+```
+
+###Nested Cross Validation
+
+```{r}
+
+DesignMatrix2 <- cbind(x, "Salary" = y)
+
+set.seed(1)
+folds1 <- createFolds(y, 10)
+MSE_lm = c()
+MSE_pcr = c()
+MSE_plsr = c()
+MSE_ridge = c()
+MSE_lasso = c()
+counter = 1
+
+for(fold in folds1){
+  train <- data.frame(DesignMatrix2[-fold,])
+  test <- data.frame(DesignMatrix2[fold,])
+  x <- model.matrix(Salary ~ ., train)[,-1]
+  y <- train$Salary
+  model_lm <- lm(Salary ~ ., data=train)
+  model_pcr <- pcr(Salary ~ ., data=train, scale = TRUE, validation = "CV", segments=10)
+  model_plsr <- plsr(Salary ~ ., data=train, scale = TRUE, validation = "CV", segments=10)
+  model_ridge <- cv.glmnet(x=x, y=y, alpha=0)
+  model_lasso <- cv.glmnet(x=x, y=y, alpha=1)
+  MSE_lm[counter] <- sum((test[,20] - predict(model_lm, test))^2)/nrow(test)
+  MSE_pcr[counter] <- sum((test[,20] - predict(model_pcr, test))^2)/nrow(test)
+  MSE_plsr[counter] <- sum((test[,20] - predict(model_plsr, test))^2)/nrow(test)
+  newdata <- test
+  newdata$Salary <- NULL
+  newdata <- data.matrix(newdata)
+  MSE_ridge[counter] <- sum((test[,20] - predict(model_ridge, newdata, s="lambda.min"))^2)/nrow(test)
+  MSE_lasso[counter] <- sum((test[,20] - predict(model_lasso, newdata, s="lambda.min"))^2)/nrow(test)
+  counter = counter + 1
+}
+
+#MSE for each method at different folds of data
+MSE <- cbind(MSE_lm, MSE_pcr, MSE_plsr, MSE_ridge, MSE_lasso)
+MSE
+
+#average MSE of each Method
+apply(MSE, 2, mean)
+
+#Based on the average MSE calculated from all the CV folds, The lowest MSE came from the Lasso model.
+
+```
+

@@ -1,0 +1,132 @@
+---
+title: "Stat 154 - Lab2"
+author: "Alex Wang"
+date: "September 11, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Libraries Used in Lab
+
+```{r}
+
+suppressWarnings(suppressMessages(library(dplyr)))
+suppressWarnings(suppressMessages(library(ggplot2)))
+
+```
+
+#Singular Value Decomposition (SVD)
+
+```{r}
+
+#Singular Value Decomposition
+#M = U%*%D%*%t(V) where,
+#U is a nxp matrix is left singular values
+#D is a pxp diagonal matrix of singular values
+#V is a pxp matrix of right singular values
+SVD = svd(USArrests)
+D = SVD$d
+U = SVD$u
+V = SVD$v
+
+#Obtain Original USArrests Data
+U%*%diag(D)%*%t(V)
+
+```
+
+#Rank One Approximation Function
+#Eckart-Young-Mirsky Theorem
+
+```{r}
+
+RankOneApprox <- function(dataset){
+  SVD = svd(dataset)
+  D = SVD$d
+  U = SVD$u
+  V = SVD$v
+  sum = 0
+  for(i in 1:ncol(dataset)){
+    sum = sum + (D[i]*U[,i]%*%t(V[,i]))
+  }
+  return(sum)
+}
+
+RankOneApprox(USArrests)
+
+#creating new variable MA = Murder + Assault
+Arrests2 <- mutate(USArrests, MA = Murder+Assault)
+svd(Arrests2)
+
+#compared to svd(USArrests), the singular values are generally the negative opposite of the singular values found in svd(USArrests). Looking at the singular vectors (2,3,4), we see that the values are approximartely the negative opposite.
+
+#Rank of Arrests2 = 4
+
+```
+
+#Visualization of SVD Output 
+
+```{r}
+
+States <- row.names(USArrests)
+U = svd(USArrests)$u
+U1 = U[,1]
+U2 = U[,2]
+
+USArrestsPlot <- data.frame(States, U1, U2)
+Plot_of_States = ggplot(USArrestsPlot, aes(x=U1, y=U2, label=States)) + geom_point() + geom_text(aes(label=States))
+Plot_of_States
+
+```
+
+```{r}
+
+Variables <- colnames(USArrests)
+V = svd(USArrests)$v
+V1 = V[,1]
+V2 = V[,2]
+
+USArrests_Variables <- data.frame(Variables, V1, V2)
+Plot_of_Variables = ggplot(USArrests_Variables, aes(x=V1, y=V2, label=Variables)) + geom_point() + geom_text(aes(label=Variables))
+
+```
+
+#Eigenvalue Decomposition
+
+```{r}
+
+R = cor(USArrests)
+evd = eigen(R)
+
+#n = nrow(USArrests)
+#I = diag(1, nrow=n)
+#Xc <- (I - matrix(rep(1, n))%*%t(matrix(rep(1, n)))/n)%*%matrix(USArrests)
+#constructing mean centered matrix
+Mean_Murder = rep(mean(USArrests$Murder), length(USArrests$Murder))
+Mean_Assault = rep(mean(USArrests$Assault), length(USArrests$Assault))
+Mean_UrbanPop = rep(mean(USArrests$UrbanPop), length(USArrests$UrbanPop))
+Mean_Rape = rep(mean(USArrests$Rape), length(USArrests$Rape))
+X <- as.matrix(USArrests - cbind(Mean_Murder, Mean_Assault, Mean_UrbanPop, Mean_Rape))
+
+#sum of squares and cross product matrix
+S <- t(X)%*%X
+
+#Comparison (equivalent matrices)
+S/(length(USArrests$Murder)-1)
+cov(X)
+
+#inverse of S
+solve(S)
+
+#eigen of S
+eigen(S)
+
+lambda = solve(diag(eigen(S)$values))
+V = eigen(S)$vectors
+
+#confirmation that V%*%inv(lambda)%*%t(V) gives inv(S)
+V%*%lambda%*%t(V)
+
+```

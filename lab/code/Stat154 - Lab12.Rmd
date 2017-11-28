@@ -1,0 +1,106 @@
+---
+title: "Stat 154 - Lab 12"
+author: "Alex Wang"
+date: "November 20, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+
+#install.packages("randomForest")
+#install.packages("ranger")
+#install.packages("ParallelForest")
+#install.packages("gbm")
+#install.packages("ISLR")
+#install.packages("tree")
+suppressWarnings(suppressMessages(library(randomForest)))
+suppressWarnings(suppressMessages(library(ranger)))
+suppressWarnings(suppressMessages(library(ParallelForest)))
+suppressWarnings(suppressMessages(library(caret)))
+suppressWarnings(suppressMessages(library(gbm)))
+suppressWarnings(suppressMessages(library(ISLR)))
+suppressWarnings(suppressMessages(library(tree)))
+
+
+```
+
+```{r}
+
+#create new discrete variable based on Sales
+attach(Carseats)
+High <- ifelse(Sales <= 8, "No", "Yes")
+carseats <- data.frame(Carseats, High)
+
+tree_carseats <- tree(High ~ .-Sales, data=carseats)
+#Summary
+summary(tree_carseats)
+#Provides an overview of the tree object, including the number of temrinal nodes, error rate, and variables used in building the branches.
+
+#Plot and Text
+plot(tree_carseats)
+text(tree_carseats, pretty=0)
+#Visual diagram of the tree and how the data segments off from branch to branch.
+
+#Object
+tree_carseats
+#Tree object with all the branch separations by the variable thresholds.
+
+```
+
+```{r}
+
+set.seed(100)
+train_idx <- sample(nrow(carseats), 0.8*nrow(carseats))
+train <- carseats[train_idx,]
+test <- carseats[-train_idx,]
+
+carseats.rf <- randomForest(formula=High ~ .-Sales, data=carseats, subset=train_idx, importance=TRUE)
+carseats.rf
+
+predicted.val <- predict(carseats.rf, test)
+error.rate <- mean(predicted.val != test$High)
+error.rate
+#The error rate is 20% whereas the estimated OOB error rate is 17.81%.
+
+varImp(carseats.rf)
+varImpPlot(carseats.rf)
+#The two most important variables are ShelveLoc and Price.
+
+```
+
+```{r}
+
+carseats2 <- carseats
+carseats2$High <- as.numeric(carseats2$High) - 1
+train <- carseats2[train_idx,]
+test <- carseats2[-train_idx,]
+
+boostedtree <- gbm(formula=High ~ .-Sales, distribution = "bernoulli", data=train, n.trees=5000)
+summary(boostedtree)
+#Two most important variables are ShelveLoc and Price
+
+```
+
+```{r}
+
+misclassification <- c()
+number.trees <- seq(from=10, to=5000, by=10)
+
+for(d in 1:4){
+  boostedtree <- gbm(formula = High ~.-Sales, distribution = "bernoulli", data=train, n.trees=5000,
+                       interaction.depth = d)
+  for(i in 1:500){
+    pred <- predict.gbm(boostedtree, newdata=test, n.trees=i*10, type="response")
+    pred <- 1 * (pred > 0.5)
+    misclassification[i] <- mean(pred != test$High)
+  }
+  plot(x=number.trees, y=misclassification, main = paste("Interaction Depth = ", d),
+       xlab = "Number of Trees", ylab = "Misclassification Rate")
+}
+
+```

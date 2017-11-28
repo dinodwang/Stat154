@@ -1,0 +1,149 @@
+---
+title: "Stat154 - Lab13"
+author: "Alex Wang"
+date: "November 27, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Libraries used for Lab
+
+```{r}
+
+#install.packages("proxy")
+suppressWarnings(suppressMessages(library(proxy)))
+
+```
+
+###K-means Clustering
+
+```{r}
+
+x <- iris[,1:4]
+k <- 3
+
+my_kmeans <- function(x, k){
+
+  init <- sample(nrow(x), k)
+  old_assignment <- rep(0, nrow(x))
+  new_assignment <- c()
+  counter = TRUE
+  
+  #first run
+  for(i in 1:nrow(x)){
+    dist <- c()
+    for(j in 1:k){
+      dist <- rbind(dist, cbind(init[j], sum(sqrt((x[i,] - x[init[j],])^2))))
+    }
+    dist <- data.frame(index=dist[,1], distance=dist[,2])
+    lowest <- dist[which.min(dist$distance),]
+    for(j in 1:k){
+      if(lowest$index == init[j]){
+        new_assignment[i] = j
+        break
+      }
+    }
+  }
+  
+  #logical variable to determine pass
+  for(i in 1:length(new_assignment)){
+    if(new_assignment[i] != old_assignment[i]){
+      counter = FALSE
+      break
+    }
+  }
+  
+  #run till convergence
+  while(!counter){
+    old_assignment = new_assignment
+    new_assignment = c()
+    assign <- data.frame(index = 1:nrow(x), old_assignment)
+    centroids <- c()
+    for(j in 1:k){
+      filteredIndex <- subset(assign, assign$old_assignment == j)$index
+      centroids <- rbind(centroids, apply(x[filteredIndex,], 2, mean))
+    }
+    for(i in 1:nrow(x)){
+      dist <- c()
+      for(j in 1:k){
+        dist <- rbind(dist, cbind(j, sum(sqrt((x[i,] - centroids[j,])^2))))
+      }
+      dist <- data.frame(index=dist[,1], distance=dist[,2])
+      lowest <- dist[which.min(dist$distance),]
+      for(j in 1:k){
+        if(lowest$index == j){
+          new_assignment[i] = j
+          break
+        }
+      }
+    }
+    counter = TRUE
+    for(i in 1:length(new_assignment)){
+      if(new_assignment[i] != old_assignment[i]){
+        counter = FALSE
+      }
+    }
+  }
+  
+  #wss and bss calculations
+  global <- apply(x, 2, mean)
+  wss <- c()
+  bss <- 0
+  for(j in 1:k){
+    filtered <- x[subset(assign, assign$old_assignment == j)$index,]
+    wss_sum = 0
+    for(i in 1:nrow(filtered)){
+      wss_sum = wss_sum + sum((filtered[i,] - centroids[j,])^2)
+    }
+    bss = bss + nrow(filtered)*sum((centroids[j,] - global)^2)
+    wss[j] = wss_sum
+  }
+  
+  #frequencies of each cluster
+  frequencies <- table(new_assignment)
+  cluster_sizes <- c()
+  for(j in 1:k){
+    cluster_sizes[j] = as.numeric(frequencies[j])
+  }
+  
+  #return values
+  return(list(cluster_sizes = cluster_sizes,
+              cluster_means = centroids, 
+              clustering_vector = new_assignment, 
+              wss_cluster = wss,
+              bss_over_tss = bss / (bss + sum(wss))))
+  
+}
+
+#Comparison
+#Notes: Generally, the functionality is the same, save for differences observed in initial samples used.
+my_kmeans(x, k)
+kmeans(x, k)
+
+```
+
+###Hierarchical Clustering
+
+```{r}
+
+#distance object based on Euclidean distances
+distanceMatrix <- proxy::dist(x)
+
+#Heirarchical Clustering based on three linkage methods:
+#Complete, Average, Single (omitted Centroid for this lab)
+hc.complete <- hclust(distanceMatrix, method = "complete")
+plot(hc.complete)
+hc.average <- hclust(distanceMatrix, method = "average")
+plot(hc.average)
+hc.single <- hclust(distanceMatrix, method = "single")
+plot(hc.single)
+
+#Results of each observation's cluster classification based on the different methods
+#Notes: The three methods generally got a unanimous consensus on the cluster assignment of each obs
+results <- cbind(cutree(hc.complete, 3), cutree(hc.average, 3), cutree(hc.single, 3))
+results
+
+```

@@ -1,0 +1,111 @@
+---
+title: "Stat 154 - Lab4"
+author: "Alex Wang"
+date: "September 25, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Libraries Used in Lab
+
+```{r}
+
+#install.packages("ggplot2")
+suppressWarnings(suppressMessages(library(ggplot2)))
+
+```
+
+```{r}
+
+#Regression w/ Unaltered Data
+cars <- mtcars
+reg1 <- lm(mpg ~ disp, data = cars)
+reg1
+
+#Regression w/ Mean-Centered Data
+cars2 <- data.frame(scale(mtcars, scale = FALSE))
+reg2 <- lm(mpg ~ disp, data = cars2)
+reg2
+disp_mean <- mean(cars$disp)
+mpg_mean <- mean(cars$mpg)
+coefficient <- reg2$coefficients[2]
+intercept_mc <- mpg_mean - disp_mean*(coefficient)
+intercept_mc
+
+#Regression w/ Scaled Data
+#Original Intercept and Slope can be calculated from data as so
+cars3 <- data.frame(scale(mtcars))
+reg3 <- lm(mpg ~ disp, data = cars3)
+reg3
+coef_std <- reg3$coefficients[2]
+orig_intercept <- mean(cars$mpg) - coef_std*(sqrt(var(cars$mpg)))/(sqrt(var(cars$disp)))*mean(cars$disp)
+orig_slope <- coef_std*(sqrt(var(cars$mpg)))/(sqrt(var(cars$disp)))
+
+#Regression w/ no Intercept
+reg4 <- lm(mpg ~ 0 + disp, data = cars)
+reg4
+
+#Regression w/ Cars with Automatic Transmission
+reg5 <- lm(mpg ~ disp, subset(cars, cars$am == 0))
+reg5
+
+```
+
+###Question 2
+
+```{r}
+
+reg_sum <- summary(reg1)
+reg_sum
+#reg_sum is a summary.lm class, specifically an lm object
+#reg_sum contains a summary of all the data including the Rsquared, F statistic, residuals, and coefficients
+
+```
+
+###Question 3
+
+```{r}
+
+ggplot(cars, aes(x=disp, y=mpg)) + 
+  geom_point() +
+  geom_smooth(method = 'lm', se=FALSE) +
+  geom_text(aes(label=row.names(cars)), col="black") +
+  xlim(50, 500) + 
+  xlab("Dispersion") + 
+  ylab("MPG") + 
+  ggtitle("Regression of MPG (response) on Dispersion (predictor)")
+
+```
+
+###Question 4
+
+```{r}
+
+#residuals vs fitted
+plot(reg1, which = 1)
+
+#normal probability
+plot(reg1, which = 2)
+
+```
+
+###Question 5
+
+```{r}
+
+#Another method to obtain coefficients (Beta-hat)
+x <- as.matrix(data.frame("intercept" = c(rep(1, length(mtcars$disp))), mtcars$disp))
+y <- as.matrix(mtcars$mpg)
+xtx <- t(x)%*%x
+solve(xtx)%*%t(x)%*%y
+
+QR <- qr(x)
+Q <- qr.Q(QR)
+R <- qr.R(QR)
+f <- t(Q)%*%y
+backsolve(R, f)
+
+```

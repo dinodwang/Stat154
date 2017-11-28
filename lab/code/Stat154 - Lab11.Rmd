@@ -1,0 +1,64 @@
+---
+title: "Stat154 - Lab10"
+author: "Alex Wang"
+date: "November 13, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+#install.packages("lda")
+#install.packages("MASS")
+#install.packages("ROCR")
+suppressWarnings(suppressMessages(library(lda)))
+suppressWarnings(suppressMessages(library(MASS)))
+suppressWarnings(suppressMessages(library(ROCR)))
+
+
+```
+
+#Dataframe for prediction
+
+```{r}
+
+set.seed(200)
+r <- c(runif(100, 1, 2), runif(100, 5, 6))
+theta <- runif(200, 0, 2*pi)
+X1 <- r * cos(theta) + rnorm(200)
+X2 <- r * sin(theta) + rnorm(200)
+y <- factor(c(rep(0, 100), rep(1, 100)))
+df2 <- data.frame(X1, X2, y)
+
+```
+
+#LDA Fit with ROC (Receiver Operating Characteristics) Curve
+
+```{r}
+
+train_idx <- sample(nrow(df2), nrow(df2)*0.7)
+training <- df2[train_idx,]
+test <- df2[-train_idx,]
+
+#predicted values based on lda fitted model
+ldafit <- MASS::lda(y ~ X1 + X2, training)
+ldapredict <- predict(ldafit, test)
+
+#posterior probabilities
+class1posterior <- ldapredict$posterior[,2]
+predicted <- prediction(class1posterior, test$y)
+perf <- performance(predicted, measure = "tpr", x.measure = "fpr")
+plot(perf)
+abline(a=0, b=1, lty=3)
+
+#Area represents classifier performance 
+#Greater than 0.5 = better than random classifier (>50)
+#Equals to 0.5 = theoretical random classifier (=50)
+#Less than 0.5 = worse than random classifier (<50)
+area <- performance(predicted, measure = "auc")
+area
+
+```
