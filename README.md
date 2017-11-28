@@ -1,4 +1,4 @@
-## stat154-fall-2017
+## Stat 154 Fall 2017 Syllabus
 
 This repository holds the course materials for the Fall 2017 edition of 
 __Statistics 154: Modern Statistical Prediction and Machine Learning__ at UC Berkeley.
